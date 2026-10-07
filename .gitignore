@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Zips
+*.zip
+
+# Keil uVision build output / user files
+Objects/
+Listings/
+DebugConfig/
+RTE/_*/
+*.uvguix.*
+*.uvoptx
+*.bak
+*.o
+*.d
+*.crf
+*.axf
+*.map
+*.lst
+*.htm
+*.dep
+*.sct
+*.scvd
