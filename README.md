@@ -23,7 +23,7 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
  INPUTS (sensing)                  STM32F401CCU6                     OUTPUTS
 ┌───────────────────┐   PA0/EXTI0 ┌──────────────────┐ PB6/PB7 ┌─────────────────────┐
 │ Active IR beam    ├────────────►│                  ├────────►│ 16x2 I2C LCD        │
-├───────────────────┤   PA1       │  NVIC + EXTI     │ (level  │ (via 3.3V↔5V shifter)│
+├───────────────────┤   PA1       │  NVIC + EXTI     │ (level  │(via 3.3V↔5V shifter)│
 │ HC-SR501 PIR      ├────────────►│  ADC1  (LDR)     │ shifter)└─────────────────────┘
 ├───────────────────┤   PA2       │  USART1 9600 8N1 │ PA9/10  ┌─────────────────────┐
 │ SW-420 vibration  ├────────────►│  I2C1            ├────────►│ HC-05 Bluetooth     │
@@ -33,7 +33,7 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
                                   │                  │ PA6     ├─────────────────────┤
                                   │                  ├────────►│ Buzzer (NPN driver) │
                                   │                  │ PA7     ├─────────────────────┤
-                                  │                  ├────────►│ Relay → flashing lamp│
+                                  │                  ├────────►│Relay → flashing lamp│
                                   └──────────────────┘         └─────────────────────┘
 ```
 
