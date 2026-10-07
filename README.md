@@ -83,7 +83,7 @@ This repository currently contains the **hardware bring-up test firmware** (one 
 | Multimeter | 1 | Needed for the checks in the assembly guide |
 | Terminal blocks, brackets/stands, cable ties, heat-shrink | as needed | Mechanical robustness / IR alignment |
 
-Estimated cost of the main list (from the project sheet): **≈ ₹2,381**.
+Estimated cost of the main list: **≈ ₹2,381**.
 
 ## 4. Power distribution strategy
 
