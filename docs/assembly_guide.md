@@ -15,7 +15,7 @@ A beginner-friendly, **build-one-block-then-test-it** guide. Flash the matching 
 3. **Common ground**: every module GND, the MCU GND and the ST-LINK GND must be tied together.
 4. **Only one power source for the Black Pill** at a time (MB102 3.3 V *or* USB-C).
 5. Handle boards by the edges; touch a metal object first to discharge static.
-6. **Low-voltage lamp only** on the relay. No mains wiring on this prototype.
+6. **Low-voltage strobe only** on the relay. No mains wiring on this prototype.
 7. Use a colour code: **red = 5 V, orange = 3.3 V, black = GND, other colours = signals**.
 
 ---
@@ -59,24 +59,47 @@ Each stage: **wire → power-check → flash test → expected result → troubl
 
 **If it fails:** LED backwards (flip it); resistor missing; the project didn't start (tick *Reset and Run*, press reset); build used the wrong device.
 
-### Stage 2 - Active IR break-beam (PA0) · `test_ir_sensor.c`
+### Stage 2 - IR break-beam (PA0) · `test_ir_sensor.c`
+
+This build uses a **5 mm IR LED (transmitter) and IR photodiode (receiver) pair**, not a ready-made module. The photodiode alone cannot drive PA0, so a one-transistor receiver stage is added. Build the two halves separately.
+
+**Identify the parts:** the IR LED is usually clear or light blue; the photodiode is usually dark/black. For both, the **longer leg is the anode (+)**. Confirm with the multimeter diode test if unsure.
+
+**A. Transmitter (always on)**
 
 | From | To |
 |------|----|
-| IR receiver VCC | 3.3 V (if the module accepts 3.3-5 V) or 5 V - see below |
-| IR receiver GND | GND |
-| IR receiver OUT | **PA0** |
-| IR emitter | power per its datasheet (usually same VCC/GND) |
+| 5 V rail | 220 Ω resistor |
+| 220 Ω resistor | IR LED **anode** (long leg) |
+| IR LED **cathode** | GND |
 
-**Before connecting OUT to PA0:** with the beam clear and powered, measure OUT to GND. It must read **≤ 3.3 V** both with the beam clear and broken. If it reads about 5 V, either power the sensor from 3.3 V (if allowed) or put a **10 kΩ/20 kΩ divider** (OUT → 10 kΩ → PA0, PA0 → 20 kΩ → GND). Open-collector (NPN) outputs are fine - the firmware turns on PA0's internal pull-up.
+The IR LED is invisible. Check it by looking at it through a phone camera: it shows a faint purple glow.
 
-**Alignment:** face emitter and receiver directly at each other, 10-50 cm apart for the first test; mount on stands.
+**B. Receiver stage (BC547/2N2222, `Q2`)**
+
+| Connection | Detail |
+|------------|--------|
+| Photodiode **cathode** (short leg) | 3.3 V |
+| Photodiode **anode** (long leg) | `Q2` **base** |
+| `Q2` **emitter** | GND |
+| `Q2` **collector** | 10 kΩ → 3.3 V (pull-up) |
+| `Q2` **collector** | **PA0** |
+
+Check the transistor pinout against the datasheet or the diode test before wiring (see Stage 7).
+
+**How it works:** with the beam clear, the photodiode passes current into the base, `Q2` turns on and PA0 sits **LOW**. When the beam is broken the current stops, `Q2` turns off and PA0 rises to 3.3 V (**HIGH**). The firmware is set for this (`IR_ACTIVE_LOW 0`, `IR_EXT_PULLUP 1` in `board.h`). PA0 never exceeds 3.3 V.
+
+**Check with the multimeter before flashing:** measure PA0 to GND.
+* Beam clear: close to **0 V**.
+* Beam blocked with a card: close to **3.3 V**.
+
+**Alignment and tuning:** face the LED and photodiode directly at each other, 5-10 cm apart for the first test, then increase the distance. Shield the receiver from direct sunlight or bright lamps, which also send IR. If PA0 stays HIGH with the beam clear, move closer or improve alignment. If PA0 stays LOW when the beam is blocked, shield the receiver from stray light (a short piece of black tube or heat-shrink over the photodiode helps) or add a 100 kΩ resistor from base to GND.
 
 **Test:** flash `test_ir_sensor.c`. **Expect:** LED steady ON; breaking the beam makes the LED blink 6 times. Add `breach_count` to the Watch window to see the interrupt counter increase.
 
-**Polarity:** if the LED blinks when the beam is *clear* or never reacts, set `IR_ACTIVE_LOW` to `0` in `board.h`.
+**Fallback:** if the discrete circuit cannot be made reliable, use a ready-made IR break-beam or obstacle-sensor module on PA0 and set `IR_ACTIVE_LOW` to `1` and `IR_EXT_PULLUP` to `0` in `board.h`.
 
-**If it fails:** emitter/receiver not aligned (the module's indicator LED shows the state); grounds not common; trimmer pot needs adjusting; some beams need a few seconds to settle.
+**Polarity:** if the LED blinks when the beam is *clear* or never reacts, flip `IR_ACTIVE_LOW`.
 
 > Note: PA0 also has the Black Pill's onboard **KEY button**. Pressing it will look like a trigger; that is normal and handy for a quick test.
 
@@ -191,9 +214,17 @@ Remember **TX goes to RX and RX goes to TX** (crossed). The HC-05's RXD expects 
 
 **Relay polarity:** the code assumes an **active-low** board and drives PA7 as open-drain (which avoids half-on relays when a 3.3 V "high" meets a 5 V-powered input). If the relay is ON while the program says OFF, set `RELAY_ACTIVE_LOW` to `0` in `board.h`.
 
-**Test 2 - add the lamp (power OFF first):** wire the lamp's **own supply +** → relay **COM**; relay **NO** → lamp +; lamp − → supply −. The lamp turns on only when the relay clicks. The lamp supply's ground does **not** need to touch the STM32 ground (the relay is opto-isolated).
+**Test 2 - add the strobe (power OFF first):** the mini strobe siren is expected to be a **12 V DC** unit (confirm the voltage and current printed on the unit or its listing before connecting). Switch its supply through the relay contacts:
 
-**If it fails:** buzzer constantly on → transistor wrong way / base shorted; buzzer silent → buzzer polarity reversed or transistor pinout wrong; relay chatters or resets the MCU → supply sagging: check MB102 current, add decoupling capacitors, power the lamp separately.
+| Connection | Detail |
+|------------|--------|
+| 12 V adapter **+** | relay **COM** |
+| relay **NO** | strobe **+** (red wire) |
+| strobe **−** (black wire) | 12 V adapter **−** |
+
+Use the screw terminals to split the adapter output, and keep the strobe wiring short and away from the signal wires. The strobe turns on only when the relay clicks. If the strobe is rated 5 V instead, power it from the 5 V rail through the relay and check its current against the MB102 budget in section 4. Do not exceed the 1 A rating of the 12 V adapter (MB102 load + strobe).
+
+**If it fails:** buzzer constantly on → transistor wrong way / base shorted; buzzer silent → buzzer polarity reversed or transistor pinout wrong; relay chatters or resets the MCU → supply sagging: check MB102 current, add decoupling capacitors, keep the strobe off the MB102 rails.
 
 ---
 
@@ -205,20 +236,20 @@ Remember **TX goes to RX and RX goes to TX** (crossed). The HC-05's RXD expects 
 | HC-05 | 30-40 mA |
 | LCD + backlight | 20-30 mA |
 | Buzzer | ~30 mA |
-| IR emitter/receiver | ~20-40 mA |
+| IR LED (220 Ω) + receiver stage | ~20 mA |
 | PIR / SW-420 / LDR / STM32 | < 50 mA total |
 
-A few hundred mA in total is fine for the MB102, **but the lamp must not be powered from it**. Linear regulators dissipate `(Vin − Vout) × I` as heat: with a 12 V adapter the 5 V regulator can get hot. Do a finger-touch check after a minute; if too hot, use a lower input voltage (e.g. 9 V) or a heat sink.
+A few hundred mA in total is fine for the MB102, **but the strobe must not be powered from its rails** (it is switched from the 12 V adapter through the relay). Linear regulators dissipate `(Vin − Vout) × I` as heat: with a 12 V adapter the 5 V regulator can get hot. Do a finger-touch check after a minute; if too hot, use a lower input voltage (e.g. 9 V) or a heat sink.
 
 ## 5. Final integration checklist (before powering the full system)
 
 - [ ] 3.3 V rail = 3.3 V ± 0.1 V, 5 V rail = 5 V ± 0.25 V (measured with everything connected)
 - [ ] 0 Ω / beep between GND of every module, the Black Pill and the ST-LINK
-- [ ] PA0, PA1, PA2 and PA4 each measured ≤ 3.3 V in every sensor state
+- [ ] PA0, PA1, PA2 and PA4 each measured ≤ 3.3 V in every sensor state (PA0: about 0 V beam clear, about 3.3 V beam blocked)
 - [ ] LCD level shifter: LV = 3.3 V, HV = 5 V, pull-ups verified on both sides
 - [ ] HC-05 TXD→PA10, RXD→PA9 (crossed), VCC = 5 V
 - [ ] Buzzer transistor orientation verified, 1 kΩ in series with the base
-- [ ] Relay polarity confirmed, lamp on separate supply
+- [ ] Relay polarity confirmed, strobe switched from the 12 V adapter (not the MB102 rails)
 - [ ] All six tests (plus LDR) pass **individually**
 - [ ] Wires tidy, joints insulated, nothing loose near the relay contacts
 
@@ -227,7 +258,7 @@ A few hundred mA in total is fine for the MB102, **but the lamp must not be powe
 | Symptom | Most likely cause |
 |---------|-------------------|
 | Nothing works, board dead | No power, rails miswired, grounds missing |
-| Random resets when relay/buzzer fires | Supply sag / noise → decoupling caps, separate lamp supply |
+| Random resets when relay/buzzer fires | Supply sag / noise → decoupling caps, strobe off the MB102 rails |
 | One sensor always "triggered" | Wrong polarity macro, floating input, trimmer pot mis-set |
 | LCD blank | Contrast pot, wrong I2C wiring, level-shifter supplies swapped |
 | Bluetooth connects but no text | TX/RX not crossed, wrong baud, wrong app mode |

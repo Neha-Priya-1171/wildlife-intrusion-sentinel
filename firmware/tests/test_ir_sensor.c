@@ -1,7 +1,7 @@
 /**
  * @file    test_ir_sensor.c
  * @brief   TEST 2 - Active IR break-beam sensor on PA0 using the EXTI0 interrupt (NVIC).
- * Wiring: IR receiver OUT --> PA0 ; sensor GND --> common GND ; VCC per module (see README).
+ * Wiring (discrete pair): see docs/assembly_guide.md, Stage 2. Receiver stage output --> PA0 ; GND common.
  * Expect: LED (PA5) steady ON while beam is clear. Break the beam -> the ISR fires
  *         instantly, main() blinks the LED 6 times, then returns to steady ON.
  * Debugger tip: add 'breach_count' to the Watch window - it increments per break.
@@ -34,6 +34,8 @@ static void ir_exti_init(void)
     gpio_mode(IR_PORT, IR_PIN, BRD_MODE_IN);
 #if IR_ACTIVE_LOW
     gpio_pull(IR_PORT, IR_PIN, BRD_PULL_UP);    /* idle HIGH, break = falling edge */
+#elif IR_EXT_PULLUP
+    gpio_pull(IR_PORT, IR_PIN, BRD_PULL_NONE);  /* external 10k pull-up on the NPN collector */
 #else
     gpio_pull(IR_PORT, IR_PIN, BRD_PULL_DOWN);
 #endif

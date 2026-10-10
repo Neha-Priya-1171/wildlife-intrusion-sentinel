@@ -34,7 +34,9 @@
 #define RELAY_PIN    7
 
 /* ---------- Module polarity - change here if YOUR module behaves the opposite way ---------- */
-#define IR_ACTIVE_LOW     1   /* 1: OUT goes LOW when beam is broken (typical NPN/LM393 modules) */
+#define IR_ACTIVE_LOW     0   /* 0 = discrete IR LED + photodiode + NPN stage (PA0 goes HIGH when beam is broken).
+                                 Set to 1 only if you use a ready-made break-beam module whose OUT goes LOW on break. */
+#define IR_EXT_PULLUP     1   /* 1 = the NPN collector has its own 10k pull-up to 3.3 V, so the MCU pull is disabled */
 #define PIR_ACTIVE_HIGH   1   /* HC-SR501: OUT goes HIGH on motion                               */
 #define VIB_ACTIVE_HIGH   1   /* SW-420 (LM393): DO goes HIGH on vibration (check the module LED) */
 #define RELAY_ACTIVE_LOW  1   /* most opto-isolated 5V relay boards: LOW = relay ON               */
