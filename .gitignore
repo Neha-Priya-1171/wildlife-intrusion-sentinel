@@ -22,3 +22,4 @@ RTE/_*/
 *.dep
 *.sct
 *.scvd
+.vscode/
