@@ -111,7 +111,7 @@ Estimated cost of the main list: **≈ ₹2,381**.
 | STM32 pin | Connected to | Function | Notes |
 |-----------|--------------|----------|-------|
 | **PA0** | IR receiver stage (NPN collector) | EXTI0 / digital in | Beam clear = LOW, beam broken = HIGH (rising edge). Polarity set by `IR_ACTIVE_LOW` in `board.h`. Black Pill KEY button is also on PA0 |
-| **PA1** | HC-SR501 PIR OUT | Digital in (EXTI1 capable) | Output is 3.3 V |
+| **PA1** | HC-SR501 PIR OUT | Digital in (EXTI1 capable) | **Not 5 V tolerant** (TTa, shared with ADC1_IN1). Measure the module's OUT before connecting - see assembly guide Stage 3 |
 | **PA2** | SW-420 DO | Digital in (EXTI2 capable) | Module powered from 3.3 V |
 | **PA4** | LDR module AO | ADC1_IN4 | Must never exceed 3.3 V |
 | **PA5** | Green LED (+) via 220 Ω | GPIO out | "SECURE" indicator |
@@ -139,6 +139,7 @@ Estimated cost of the main list: **≈ ₹2,381**.
         ├── test_led.c         # PA5 status LED
         ├── test_ir_sensor.c   # PA0 EXTI0 interrupt
         ├── test_sensors.c     # PIR (PA1) + vibration (PA2)
+        ├── test_pir.c         # PIR-only diagnostic for a stuck PA1
         ├── test_ldr.c         # (bonus) PA4 ADC
         ├── test_lcd.c         # I2C1 16x2 LCD
         ├── test_bluetooth.c   # USART1 + HC-05

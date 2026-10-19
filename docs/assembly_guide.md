@@ -111,7 +111,18 @@ Check the transistor pinout against the datasheet or the diode test before wirin
 |---------|----|
 | VCC | 5 V |
 | GND | GND |
-| OUT | **PA1** (output is 3.3 V, safe) |
+| OUT | **PA1** - *only after the voltage check below passes* |
+
+> ⚠ **PA1 is not 5 V tolerant.** PA1 carries ADC1_IN1, so its I/O structure is **TTa** in the STM32F401xB/C datasheet pin table, not FT. Absolute maximum on a TTa pin is VDD + 0.3 V ≈ 3.6 V. A genuine HC-SR501 has an onboard 3.3 V regulator and its OUT swings 0 / 3.3 V, which is fine - but clones and lookalike modules exist that swing to VCC. **Measure OUT before you plug it into PA1.**
+
+**Mandatory check before connecting OUT (do this with OUT unplugged from the MCU):**
+
+1. Power the module, black probe on the module's own GND pin.
+2. Measure module VCC→GND. It should read 4.8-5.1 V. A reading well below that means the MB102 rail is sagging.
+3. Measure OUT→GND, idle and while waving a hand, for at least 60 s.
+   * **0 V idle, ~3.3 V on motion** → correct, connect to PA1.
+   * **Anything above 3.3 V** → do **not** connect it to PA1. See "PA1 stuck HIGH" below.
+   * **A level that never changes** → the module is not operating; the fault is upstream of the firmware.
 
 Set the module's jumper to *repeat trigger (H)* and turn both trimmers to the middle (one sets sensitivity/range, one sets hold time - turn hold time to minimum for testing).
 
@@ -132,6 +143,26 @@ Turn the blue trimmer until the module's indicator LED is just off when it is st
 Watch `pir_events` / `vib_events` in the debugger.
 
 **If it fails:** PIR still warming up; PIR dome facing a heat source/sunlight; vibration too sensitive → turn pot to reduce, or too insensitive → turn pot the other way; polarity wrong → adjust `PIR_ACTIVE_HIGH` / `VIB_ACTIVE_HIGH`.
+
+#### Diagnosing "PA1 always reads HIGH" · `test_pir.c`
+
+`test_sensors.c` mixes two sensors and a 30 s blocking warm-up, which makes a stuck pin hard to see. Build **`test_pir.c` + `common/board.c`** instead: it watches PA1 only, samples from t = 0, and never blocks.
+
+The variable that settles the question is **`pir_low_seen`**. It latches to 1 the first time PA1 reads 0. A PIR merely being *held* high by its hold-time pot still drops low eventually, so `pir_low_seen` becomes 1. If it stays 0 for several minutes, PA1 never goes low at all and the cause is electrical.
+
+Run these three passes, editing `PIR_PULL_MODE` at the top of the file and re-flashing each time.
+
+| Pass | `PIR_PULL_MODE` | PIR OUT wire | Expected `pir_raw` | If it differs |
+|------|-----------------|--------------|--------------------|---------------|
+| 1 | `BRD_PULL_DOWN` | **unplugged from PA1** | `0` | PA1 reads 1 with nothing attached and an internal pull-down active → the pin itself is damaged (likely from over-voltage) or a stray wire is driving it. Move the PIR to a spare pin such as PB0 and retest. |
+| 2 | `BRD_PULL_UP` | **unplugged from PA1** | `1` | PA1 cannot be pulled high → broken wire to the MCU, or wrong pin on the board. Confirms the Watch plumbing works. |
+| 3 | `BRD_PULL_DOWN` | connected | toggles with motion | Still stuck at 1 → the module is driving the line high permanently. Go back to the OUT→GND measurement above. |
+
+Passes 1 and 2 test the **MCU pin in isolation**, with no sensor attached. Run them first; they take two minutes and they tell you whether you are debugging the STM32 or the sensor.
+
+**Reading 4.3 V on OUT.** That is roughly 5 V minus one diode drop, which most often means the module is reverse-powered - VCC and GND swapped. Module pin order is not standardised: some are VCC-OUT-GND, some GND-OUT-VCC, and the silkscreen is usually hidden under the lens. Pull the dome off and read the labels on the PCB before trusting the order. A reverse-powered module typically sits at a fixed junk output level and never detects, which matches a stuck reading that two different sensors share and that survives changing both pots. Other possibilities: the module is a clone with no 3.3 V regulator (OUT swings to VCC), or the pin being probed is not OUT.
+
+**Do not** fix a 4.3 V output with a bare resistive divider until you know why it is 4.3 V. If the module genuinely has a 5 V push-pull output, a 10 kΩ / 20 kΩ divider from OUT to PA1 to GND is appropriate. If it is 4.3 V because the supply is reversed, a divider just feeds PA1 a quieter wrong signal.
 
 ### Stage 4 - LDR light sensor (PA4) · `test_ldr.c` *(bonus test)*
 

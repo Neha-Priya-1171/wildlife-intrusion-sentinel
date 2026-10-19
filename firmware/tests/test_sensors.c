@@ -36,8 +36,13 @@ int main(void)
 
     board_init();
     led_init();
-    gpio_mode(PIR_PORT, PIR_PIN, BRD_MODE_IN);   /* HC-SR501 drives its own output (3.3 V) */
+    gpio_mode(PIR_PORT, PIR_PIN, BRD_MODE_IN);   /* PIR module drives its own output */
     gpio_mode(VIB_PORT, VIB_PIN, BRD_MODE_IN);
+    /* Pull-downs so a disconnected or non-driving module reads 0 instead of
+     * floating at a random level. A module that is actually driving the line
+     * overrides the ~40k internal pull easily. */
+    gpio_pull(PIR_PORT, PIR_PIN, BRD_PULL_DOWN);
+    gpio_pull(VIB_PORT, VIB_PIN, BRD_PULL_DOWN);
 
     /* PIR needs ~30-60 s to stabilise after power-up */
     uint32_t t0 = millis();
@@ -45,6 +50,12 @@ int main(void)
         led_blink(1, 100, 900);
     }
     led_set(0);
+
+    /* Seed the edge detectors with the levels that are already present. Without
+     * this, a line sitting HIGH when warm-up ends counts as a motion event and
+     * pir_events reads 1 before anything has actually moved. */
+    pir_prev = pir_active();
+    vib_prev = vib_active();
 
     for (;;) {
         pir_state = pir_active();
