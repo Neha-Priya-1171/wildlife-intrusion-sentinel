@@ -37,13 +37,29 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
                                   └──────────────────┘         └─────────────────────┘
 ```
 
-**Detection logic (target firmware behaviour)**
+**Detection logic - escalation across the boundary**
 
-1. **IDLE / SECURE** - green LED gives a short heartbeat flash every 2 s, LCD shows `STATUS: SECURE`, CPU waits for an interrupt. (A heartbeat rather than steady on, because **solid** is reserved to mean "this zone is breached".)
-2. **TRIGGER** - IR beam break (or vibration/PIR edge) raises an EXTI interrupt.
-3. **VALIDATE** - firmware checks the other sensors inside a short time window; the **LDR** reading is used to adjust for day/night/glare behaviour.
-4. **DETER** - the breached **zone's LED goes solid** to show which side (PA5 for zone A, PA8 for zone B); every fitted buzzer plays a varying pattern; the relay also switches the strobe siren if one is fitted.
-5. **ALERT** - `ZONE 1: ANIMAL BREACH` is sent over USART1 → HC-05 → phone; LCD shows `STATUS: BREACH` until reset.
+The IR beam *is* the boundary. The two zones are the two sides of it, and each owns one
+LED and one buzzer, so the hardware mirrors the geography:
+
+* **Zone A = PERIMETER** - outside the beam, where the vibration sensor listens
+* **Zone B = FIELD** - inside the beam, the crop being protected
+
+1. **SECURE** - PA5 gives a short heartbeat flash every 2 s, LCD `STATUS: SECURE`.
+2. **APPROACH** - ground vibration at the fence. Something heavy is near, but still
+   outside. Zone A's LED blinks and zone A's buzzer gives a slow, soft chirp - a nudge.
+   Most animals turn away here, and that is counted in `turned_away`.
+3. **BREACH** - the IR beam breaks: it has crossed into the field. Zone B's LED goes
+   **solid**, **both** buzzers run the full varying cadence, the relay fires.
+4. **ALERT** - `ZONE 1: ANIMAL BREACH` over USART1 → HC-05 → phone; LCD `BREACH: IN FIELD`.
+5. **COOLDOWN** - 3 s of quiet, then back to SECURE.
+
+**Why not alarm the moment any sensor fires?** Because an animal walking *past* the fence
+has taken nothing. Blasting it every time teaches it to ignore the noise, which is the
+habituation this project exists to avoid. The full deterrent is spent only on an animal
+that actually crossed. It also gives the false-alarm filter real meaning: a beam break
+with **no approach beforehand** is a bird, a leaf or a gust, so it is counted in
+`filtered` and ignored. In the dark, or in demo mode, one sensor is enough on its own.
 
 This repository currently contains the **hardware bring-up test firmware** (one small program per subsystem). Integrated firmware comes after every block passes its test.
 

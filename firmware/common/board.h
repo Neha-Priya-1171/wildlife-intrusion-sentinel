@@ -106,10 +106,20 @@ uint8_t  gpio_read(GPIO_TypeDef *p, uint8_t pin);
 /* Buzzer helpers. One implementation in board.c, used by every test and by the
  * application, so wiring a second buzzer is a board.h change and nothing else.
  * buzzer_set() drives BOTH buzzers together when BUZ2_ENABLE is 1. */
+/* Buzzers. buzzer_set() sounds every fitted buzzer; buzzer_mask() sounds a chosen
+ * one, which is how the perimeter warning chirps on zone A's buzzer alone while the
+ * field stays quiet. */
+#define BUZZER_1    0x01u          /* PA6, zone A / perimeter */
+#define BUZZER_2    0x02u          /* PB0, zone B / field     */
+#define BUZZER_ALL  (BUZZER_1 | BUZZER_2)
 void     buzzer_init(void);
-void     buzzer_set(uint8_t on);
+void     buzzer_set(uint8_t on);                      /* all buzzers */
+void     buzzer_mask(uint8_t which, uint8_t on);      /* chosen buzzers */
 
-/* Zone indicators. zone is 0 for zone A, 1 for zone B. */
+/* Zones. The IR beam is the physical line between them:
+ *   ZONE_A = PERIMETER, the fence line outside the beam. Vibration sensor lives here.
+ *   ZONE_B = FIELD, the crop inside the beam. Where the animal ends up once it crosses.
+ * Each zone owns one LED and one buzzer, so the hardware mirrors the geography. */
 #define ZONE_A  0u
 #define ZONE_B  1u
 void     zone_leds_init(void);

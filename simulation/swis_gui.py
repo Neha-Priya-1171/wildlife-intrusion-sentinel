@@ -20,7 +20,7 @@ Protocol (see sim_main.c):
     EV,SRC=IR|PIR|VIB
     ST,<STATE>,DETER=0|1
     ALERT,ZONE1,ANIMAL BREACH
-    SWIS,STATE=..,BREACH=..,FALSE=..,LDR=..,ZONE=A|B,DAY|NIGHT,DEMO=0|1
+    SWIS,STATE=..,BREACH=..,FALSE=..,AWAY=..,LDR=..,ZONE=A|B,DAY|NIGHT,DEMO=0|1
 """
 
 import argparse
@@ -51,9 +51,10 @@ MUTED = "#8b93a3"
 TEXT = "#e8ecf3"
 
 STATE_COLOR = {
+    "WARMING UP": ("#6b7280", "WARMING UP"),
     "WARMUP":   ("#6b7280", "WARMING UP"),
     "SECURE":   ("#22c55e", "SECURE"),
-    "VALIDATE": ("#f59e0b", "CHECKING"),
+    "APPROACH": ("#f59e0b", "AT THE FENCE"),
     "BREACH":   ("#ef4444", "BREACH"),
     "COOLDOWN": ("#3b82f6", "COOLDOWN"),
 }
@@ -143,13 +144,11 @@ class DemoSource(threading.Thread):
         return True
 
     def _breach_sequence(self):
-        self._emit("EV,SRC=IR")
-        self._emit("ST,VALIDATE,DETER=0")
-        if not self._sleep(1.1):
+        self._emit("EV,SRC=VIB")                 # ground tremor at the fence
+        self._emit("ST,APPROACH,DETER=0")
+        if not self._sleep(3.0):                 # warning chirp, animal hesitates
             return
-        self._emit("EV,SRC=PIR")
-        if not self._sleep(0.35):
-            return
+        self._emit("EV,SRC=IR")                  # it crosses the beam anyway
         self._emit("ST,BREACH,DETER=1")
         self._emit("ALERT,ZONE1,ANIMAL BREACH")
         if not self._sleep(8.0):
@@ -162,7 +161,7 @@ class DemoSource(threading.Thread):
     def run(self):
         self.q.put("#OK,DEMO MODE - no hardware. Press SPACE to trigger an intrusion.")
         self._emit("ST,WARMUP,DETER=0")
-        breaches, false_alarms, t = 0, 0, 0.0
+        breaches, false_alarms, away, t = 0, 0, 0, 0.0
         self._sleep(3.0)
         self._emit("ST,SECURE,DETER=0")
 
@@ -171,8 +170,8 @@ class DemoSource(threading.Thread):
             # 1 Hz heartbeat, exactly like the firmware
             ldr = 1800 + int(700 * math.sin(t / 9.0))
             zone = "A" if breaches % 2 == 0 else "B"
-            self._emit("SWIS,STATE=SECURE,BREACH=%d,FALSE=%d,LDR=%d,ZONE=%s,DAY,DEMO=1"
-                       % (breaches, false_alarms, ldr, zone))
+            self._emit("SWIS,STATE=SECURE,BREACH=%d,FALSE=%d,AWAY=%d,LDR=%d,ZONE=%s,DAY,DEMO=1"
+                       % (breaches, false_alarms, away, ldr, zone))
             t += 1.0
 
             if self.manual.is_set() or time.time() >= next_auto:
@@ -181,11 +180,11 @@ class DemoSource(threading.Thread):
                 self._breach_sequence()
                 next_auto = time.time() + 16.0
             elif int(t) % 11 == 0:
-                # an unconfirmed trigger: one sensor only, no breach
-                false_alarms += 1
+                # an animal that comes to the fence and thinks better of it
+                away += 1
                 self._emit("EV,SRC=VIB")
-                self._emit("ST,VALIDATE,DETER=0")
-                self._sleep(2.0)
+                self._emit("ST,APPROACH,DETER=0")
+                self._sleep(4.0)
                 self._emit("ST,SECURE,DETER=0")
             else:
                 self._sleep(1.0)
@@ -252,6 +251,7 @@ class App(tk.Tk):
         self.ldr = 0
         self.demo_flag = False
         self.zone = "A"           # which side of the farm the breach is on
+        self.turned_away = 0      # approached the fence but never crossed
         self.connected = False
 
         self.animal_phase = "hidden"     # hidden | entering | grazing | fleeing
@@ -303,7 +303,8 @@ class App(tk.Tk):
 
         self.stat_widgets = {}
         for key, caption in (("breaches", "BREACHES"), ("false", "FILTERED"),
-                             ("zone", "ZONE"), ("ldr", "LIGHT"), ("mode", "TIME")):
+                             ("away", "TURNED AWAY"), ("zone", "ZONE"),
+                             ("ldr", "LIGHT"), ("mode", "TIME")):
             cell = tk.Frame(strip, bg=PANEL)
             cell.pack(side="left", padx=16)
             val = tk.Label(cell, text="0", font=self.f_num, fg=TEXT, bg=PANEL)
@@ -368,7 +369,11 @@ class App(tk.Tk):
             self.deter = self._field(parts, "DETER") == "1"
             if self.siren:
                 self.siren.on.set() if self.deter else self.siren.on.clear()
-            if new_state == "BREACH":
+            if new_state == "APPROACH":
+                # at the fence but still outside: walk up to the beam and wait
+                if self.animal_phase == "hidden":
+                    self.animal_phase, self.phase_t = "approaching", 0.0
+            elif new_state == "BREACH":
                 # the deterrent fires: the animal turns and runs for the trees
                 self.animal_phase, self.phase_t = "fleeing", 0.0
             elif new_state == "SECURE":
@@ -388,6 +393,7 @@ class App(tk.Tk):
             self.night = "NIGHT" in parts
             self.demo_flag = self._field(parts, "DEMO") == "1"
             self.zone = self._field(parts, "ZONE") or self.zone
+            self.turned_away = int(self._field(parts, "AWAY") or self.turned_away)
 
     @staticmethod
     def _field(parts, key):
@@ -417,7 +423,11 @@ class App(tk.Tk):
     def _advance_animal(self):
         dt = 0.03
         self.phase_t += dt
-        if self.animal_phase == "entering":
+        if self.animal_phase == "approaching":
+            self.animal_x += 130 * dt            # up to the fence, not through it
+            if self.animal_x >= BEAM_X - 78:
+                self.animal_x = BEAM_X - 78.0
+        elif self.animal_phase == "entering":
             self.animal_x += 150 * dt                 # walking in from the forest
             if self.animal_x >= 545:
                 self.animal_x, self.animal_phase = 545.0, "grazing"
@@ -524,17 +534,21 @@ class App(tk.Tk):
         self._deterrent(c, breach or self.deter)
 
         # ---- zone indicator LEDs, mirroring the real PA3 / PA8 LEDs ----
-        alarmed = self.state in ("BREACH", "COOLDOWN", "VALIDATE")
-        for name, zx in (("A", 430), ("B", 620)):
-            hit = alarmed and self.zone == name
-            if hit and self.state == "VALIDATE":
-                hit = (self.frame // 8) % 2          # blinking while checking
+        alarmed = self.state in ("BREACH", "COOLDOWN", "APPROACH")
+        for name, zx in (("A", 250), ("B", 620)):
+            if self.state == "APPROACH":
+                hit = (name == "A") and bool((self.frame // 8) % 2)
+            elif self.state in ("BREACH", "COOLDOWN"):
+                hit = True if name == "B" else (self.state == "BREACH")
+            else:
+                hit = False
             col = "#ff3b3b" if hit else "#3d4654"
             c.create_rectangle(zx - 26, GROUND_Y - 150, zx + 26, GROUND_Y - 120,
                                fill="#1b2029", width=0)
             c.create_oval(zx - 9, GROUND_Y - 143, zx + 9, GROUND_Y - 125,
                           fill=col, width=0)
-            c.create_text(zx, GROUND_Y - 160, text="ZONE " + name,
+            c.create_text(zx, GROUND_Y - 160,
+                          text="PERIMETER" if name == "A" else "FIELD",
                           fill="#ffffff" if self.night else "#3b3010",
                           font=self.f_small)
 
@@ -547,8 +561,8 @@ class App(tk.Tk):
             c.create_text(lx + 36, 72, text=name, anchor="w", font=self.f_small,
                           fill="#ffffff" if self.night else "#15301f")
 
-        if self.state == "VALIDATE":
-            c.create_text(SCENE_W // 2, 108, text="CHECKING SECOND SENSOR...",
+        if self.state == "APPROACH":
+            c.create_text(SCENE_W // 2, 108, text="ANIMAL AT THE FENCE - WARNING CHIRP",
                           fill="#b45309", font=self.f_pill)
 
     def _deterrent(self, c, active):
@@ -618,6 +632,7 @@ class App(tk.Tk):
         self.stat_widgets["false"].config(text=str(self.false_alarms))
         self.stat_widgets["ldr"].config(text=str(self.ldr))
         self.stat_widgets["mode"].config(text="NIGHT" if self.night else "DAY")
+        self.stat_widgets["away"].config(text=str(self.turned_away))
         self.stat_widgets["zone"].config(
             text=self.zone,
             fg="#ef4444" if self.state in ("BREACH", "COOLDOWN") else TEXT)

@@ -66,13 +66,17 @@ void buzzer_init(void)
 #endif
 }
 
-void buzzer_set(uint8_t on)
+/* Sound only the chosen buzzers. The perimeter warning uses BUZZER_1 on its own so
+ * that a soft chirp at the fence is audibly different from the full field alarm. */
+void buzzer_mask(uint8_t which, uint8_t on)
 {
-    gpio_write(BUZ_PORT, BUZ_PIN, on);
+    if (which & BUZZER_1) gpio_write(BUZ_PORT, BUZ_PIN, on);
 #if BUZ2_ENABLE
-    gpio_write(BUZ2_PORT, BUZ2_PIN, on);
+    if (which & BUZZER_2) gpio_write(BUZ2_PORT, BUZ2_PIN, on);
 #endif
 }
+
+void buzzer_set(uint8_t on) { buzzer_mask(BUZZER_ALL, on); }
 
 /* ---- Zone indicator LEDs ----
  * These, not the buzzers, are what tell you which side of the farm was breached. */
