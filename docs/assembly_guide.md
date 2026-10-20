@@ -61,6 +61,8 @@ Each stage: **wire → power-check → flash test → expected result → troubl
 
 ### Stage 2 - IR break-beam (PA0) · `test_ir_sensor.c`
 
+> ✅ **Status: COMPLETE.** Transmitter and receiver stages are both built, and `test_ir_sensor.c` has been run and passes on hardware. The steps below are kept as the build record and for rebuilding the stage if the wiring is disturbed.
+
 This build uses a **5 mm IR LED (transmitter) and IR photodiode (receiver) pair**, not a ready-made module. The photodiode alone cannot drive PA0, so a one-transistor receiver stage is added. Build the two halves separately.
 
 **Identify the parts:** the IR LED is usually clear or light blue; the photodiode is usually dark/black. For both, the **longer leg is the anode (+)**. Confirm with the multimeter diode test if unsure.
@@ -245,17 +247,96 @@ Remember **TX goes to RX and RX goes to TX** (crossed). The HC-05's RXD expects 
 
 **Relay polarity:** the code assumes an **active-low** board and drives PA7 as open-drain (which avoids half-on relays when a 3.3 V "high" meets a 5 V-powered input). If the relay is ON while the program says OFF, set `RELAY_ACTIVE_LOW` to `0` in `board.h`.
 
-**Test 2 - add the strobe (power OFF first):** the mini strobe siren is expected to be a **12 V DC** unit (confirm the voltage and current printed on the unit or its listing before connecting). Switch its supply through the relay contacts:
+**Test 2 - the strobe siren** now has its own stage, because it is the first test that puts a live 12 V load on the relay contacts. Finish Test 1 above (relay clicking with **nothing** attached) before going there. See **Stage 8**.
+
+**If it fails:** buzzer constantly on → transistor wrong way / base shorted; buzzer silent → buzzer polarity reversed or transistor pinout wrong; relay chatters or resets the MCU → supply sagging: check MB102 current, add decoupling capacitors, keep the strobe off the MB102 rails.
+
+### Stage 8 - 12 V strobe siren (PA7, via the relay) · `test_siren.c`
+
+> ⚠ **Status: NOT YET TESTED.** The siren has been received and the test program is written,
+> but it has never been run. Nothing below is a verified result.
+
+**The part:** Mini Strobe Wired Siren, marked **A-12-B**, red, two flying leads.
+The packaging states **12 V**. It does **not** state a current rating, so the current is
+unknown until you measure it. Units of this size typically draw in the region of 100-300 mA,
+but treat that as an expectation to check, not a specification.
+
+**Supply:** VMAX SMPS adaptor, AC 100-240 V in, **12 V / 1 A** out. This single adapter feeds
+both the MB102 and the siren, so the two together must stay under 1 A.
+
+#### Safety rules for this stage
+
+* The siren is **never** connected to a GPIO pin, to 3V3, to 5V, or to any MB102 rail. Only the
+  relay contacts switch it, straight from the 12 V adapter.
+* Keep the mains side of the adapter untouched. The adapter is marked *for indoor use only*.
+* This stage stays entirely at 12 V DC. **Do not put mains voltage on the relay contacts.**
+* It is loud. Test it briefly, and not next to your ear.
+
+#### Pre-power checks (do all of these before applying 12 V)
+
+1. **Confirm the relay contact rating** printed on the relay module. Typical boards are marked
+   10 A 250 VAC / 10 A 30 VDC, which is far above what the siren needs. If yours is marked
+   lower, check it still exceeds the measured siren current with margin.
+2. **Confirm the relay input works at 3.3 V logic.** `board.h` has `RELAY_ACTIVE_LOW 1`, and the
+   firmware drives PA7 **open-drain**, so the MCU only ever pulls the input to GND and never
+   tries to present a 3.3 V "high" to a 5 V-referenced input. This is the arrangement that
+   works reliably; Test 1 in Stage 7 is what proves it on your particular board.
+3. **Check the JD-VCC jumper** if your relay module has one. With the jumper fitted, VCC and
+   JD-VCC are tied and the opto-isolation is bypassed. That is acceptable here because
+   everything shares one ground anyway, but know which case you are in.
+4. **Identify siren polarity.** The red lead is **+**. Confirm with the multimeter if the second
+   lead is not obviously black. Getting this backwards on a DC siren usually just means silence,
+   but do not rely on that.
+5. **Measure the siren current first, without the relay.** Briefly connect the siren straight
+   across the 12 V adapter with the multimeter in series on the **10 A / A** range. Record the
+   reading. Then subtract it from 1 A - what is left is your budget for the MB102 and
+   everything on its rails.
+
+#### Wiring
 
 | Connection | Detail |
 |------------|--------|
 | 12 V adapter **+** | relay **COM** |
-| relay **NO** | strobe **+** (red wire) |
-| strobe **−** (black wire) | 12 V adapter **−** |
+| relay **NO** | siren **+** (red lead) |
+| siren **−** (second lead) | 12 V adapter **−** |
+| relay **VCC** | 5 V rail |
+| relay **GND** | common ground |
+| relay **IN** | **PA7** |
 
-Use the screw terminals to split the adapter output, and keep the strobe wiring short and away from the signal wires. The strobe turns on only when the relay clicks. If the strobe is rated 5 V instead, power it from the 5 V rail through the relay and check its current against the MB102 budget in section 4. Do not exceed the 1 A rating of the 12 V adapter (MB102 load + strobe).
+The siren is energised only while the relay is active, so **NO** (normally open) is correct;
+on **NC** it would scream whenever the board was off.
 
-**If it fails:** buzzer constantly on → transistor wrong way / base shorted; buzzer silent → buzzer polarity reversed or transistor pinout wrong; relay chatters or resets the MCU → supply sagging: check MB102 current, add decoupling capacitors, keep the strobe off the MB102 rails.
+*Optional but recommended:* a 1N4007 across the siren leads, cathode to **+**, to catch any
+inductive kick when the contacts open. A mini strobe siren is mostly electronic rather than a
+plain coil, so this may do nothing - it is cheap insurance for the relay contacts either way.
+
+#### Procedure
+
+1. Wire everything with the 12 V adapter **unplugged**. Double-check COM/NO against the table.
+2. Build **`test_siren.c` + `common/board.c`** as its own Keil target and flash it.
+3. Keep the 12 V adapter unplugged for the first run. The on-board LED mirrors the relay, so you
+   get the whole sequence silently and can confirm the firmware before anything is loud.
+4. Plug in the 12 V adapter and press reset. **Expect:** LED blinks for 5 s (arming, silent) →
+   3 bursts of ~300 ms with 3 s of silence between them → one 2 s burst → relay off, sequence
+   ends. The siren should be silent from then on.
+5. Add `siren_cmd`, `siren_on`, `siren_on_count` and `siren_guard_tripped` to the Keil Watch
+   window. Write **1** to `siren_cmd` to switch the siren ON, **0** to switch it OFF. No reflash
+   needed. If you leave it at 1, the firmware forces it off after 30 s and sets
+   `siren_guard_tripped`.
+
+#### Expected results
+
+| Relay state | PA7 | Siren | LED (PA5) | `siren_on` |
+|-------------|-----|-------|-----------|------------|
+| OFF | released (high-Z, pulled high by the module) | silent, no strobe | off | 0 |
+| ON | pulled LOW by the MCU | sounding + flashing | on | 1 |
+
+**If it fails:** relay clicks but the siren stays dead → siren polarity reversed, or the load is
+on NC instead of NO, or the adapter is not actually delivering 12 V under load (measure it while
+the relay is on). Siren sounds weakly or the MCU resets when it fires → the adapter is being
+overloaded: the siren plus the MB102 exceeds 1 A, so power the siren from a separate supply.
+Siren sounds the moment power is applied, before the sequence → load wired to NC, or
+`RELAY_ACTIVE_LOW` is set wrong for your board.
 
 ---
 
@@ -269,8 +350,13 @@ Use the screw terminals to split the adapter output, and keep the strobe wiring 
 | Buzzer | ~30 mA |
 | IR LED (220 Ω) + receiver stage | ~20 mA |
 | PIR / SW-420 / LDR / STM32 | < 50 mA total |
+| **Siren A-12-B (12 V side, not an MB102 load)** | **unknown - measure it (expect roughly 100-300 mA)** |
 
-A few hundred mA in total is fine for the MB102, **but the strobe must not be powered from its rails** (it is switched from the 12 V adapter through the relay). Linear regulators dissipate `(Vin − Vout) × I` as heat: with a 12 V adapter the 5 V regulator can get hot. Do a finger-touch check after a minute; if too hot, use a lower input voltage (e.g. 9 V) or a heat sink.
+A few hundred mA in total is fine for the MB102, **but the siren must not be powered from its rails** (it is switched from the 12 V adapter through the relay).
+
+**The 1 A adapter is shared.** One VMAX 12 V / 1 A supply feeds the MB102 input *and* the siren through the relay contacts. Budget it as `MB102 input current + siren current < 1 A`. The siren figure is still unknown, so measure it (Stage 8, pre-power check 5) before any sustained run. If the total is tight, give the siren its own 12 V supply and just share the ground.
+
+Linear regulators dissipate `(Vin − Vout) × I` as heat: with a 12 V adapter the 5 V regulator can get hot. Do a finger-touch check after a minute; if too hot, use a lower input voltage (e.g. 9 V) or a heat sink.
 
 ## 5. Final integration checklist (before powering the full system)
 
@@ -280,8 +366,10 @@ A few hundred mA in total is fine for the MB102, **but the strobe must not be po
 - [ ] LCD level shifter: LV = 3.3 V, HV = 5 V, pull-ups verified on both sides
 - [ ] HC-05 TXD→PA10, RXD→PA9 (crossed), VCC = 5 V
 - [ ] Buzzer transistor orientation verified, 1 kΩ in series with the base
-- [ ] Relay polarity confirmed, strobe switched from the 12 V adapter (not the MB102 rails)
-- [ ] All six tests (plus LDR) pass **individually**
+- [ ] Relay polarity confirmed, siren switched from the 12 V adapter (not the MB102 rails)
+- [ ] Siren current measured and recorded; `MB102 input + siren < 1 A` on the shared adapter
+- [ ] Siren on relay **NO** (not NC), red lead to **+**, relay contact rating checked
+- [ ] All stage tests pass **individually**, including Stage 8 (siren)
 - [ ] Wires tidy, joints insulated, nothing loose near the relay contacts
 
 ## 6. Quick diagnostics table

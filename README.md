@@ -54,9 +54,9 @@ This repository currently contains the **hardware bring-up test firmware** (one 
 | 1 | STM32F401CCU6 Black Pill | 1 | 3.3 V logic, 256 KB flash. Solder the header pins first |
 | 2 | ST-LINK V2 programmer (SWD) | 1 | Needs ST-LINK driver on the PC |
 | 3 | MB102 breadboard power module | 1 | Two switchable rails: set one to 3.3 V, one to 5 V |
-| 4 | 12 V 1 A DC adapter (barrel jack) | 1 | Input for the MB102 (7-12 V) |
+| 4 | 12 V 1 A DC adapter (barrel jack) | 1 | VMAX SMPS, input AC 100-240 V, output 12 V / 1 A. Feeds the MB102 **and** the siren - see the budget in section 4 |
 | 5 | USB Type-C cable | 1 | Optional power / USB access to the Black Pill |
-| 6 | 5 mm IR transmitter + photodiode receiver pair | 1 pair | Replaces the unavailable active IR break-beam pair. Needs a 220 Ω resistor and a one-transistor receiver stage (assembly guide, Stage 2). **Not yet purchased** |
+| 6 | 5 mm IR transmitter + photodiode receiver pair | 1 pair | Replaces the unavailable active IR break-beam pair. 220 Ω resistor + one-transistor receiver stage (assembly guide, Stage 2). **Received, built and tested** |
 | 7 | HC-SR501 PIR sensor | 1 | Needs ~30-60 s warm-up |
 | 8 | SW-420 vibration sensor module (LM393) | 1 | Digital output (DO) used |
 | 9 | LDR sensor module | 1 | Analog output (AO) used |
@@ -67,10 +67,10 @@ This repository currently contains the **hardware bring-up test firmware** (one 
 | 14 | Active piezo buzzer (5 V) | 1 | Active = built-in oscillator |
 | 15 | NPN transistor BC547 (or 2N2222) | 1 | Buzzer driver |
 | 16 | 5 V single-channel opto-isolated relay module | 1 | Check active-high/low |
-| 17 | Mini strobe wired siren / indicator light | 1 | Replaces the unavailable 5 V flashing lamp. Expected 12 V DC: confirm rating, switch from the 12 V adapter via the relay. **Not yet purchased** |
+| 17 | Mini strobe wired siren (model **A-12-B**, red) | 1 | Replaces the unavailable 5 V flashing lamp. **12 V DC confirmed** from the packaging; current rating is **not** printed and must be measured. Two flying leads, switched from the 12 V adapter via the relay. **Received - testing pending** |
 | 18 | 830-point breadboard | 1 | |
 | 19 | DuPont jumper wires (M-M, M-F, F-F) | 1 set | |
-| 20 | Power / ground bus wiring | 1 set | **Not yet purchased** (jumper wires can substitute) |
+| 20 | Power / ground bus wiring | 1 set | **Design in progress** - not purchased, not implemented. Proposed approach under investigation; see section 9 |
 
 **Recommended supporting parts**
 
@@ -140,6 +140,7 @@ Estimated cost of the main list: **≈ ₹2,381**.
         ├── test_ir_sensor.c   # PA0 EXTI0 interrupt
         ├── test_sensors.c     # PIR (PA1) + vibration (PA2)
         ├── test_pir.c         # PIR-only diagnostic for a stuck PA1
+        ├── test_siren.c       # 12 V strobe siren via the PA7 relay
         ├── test_ldr.c         # (bonus) PA4 ADC
         ├── test_lcd.c         # I2C1 16x2 LCD
         ├── test_bluetooth.c   # USART1 + HC-05
@@ -162,14 +163,41 @@ Estimated cost of the main list: **≈ ₹2,381**.
 
 ## 9. Build status
 
-| Item | Status |
-|------|--------|
-| Items 1-5, 7-16, 18, 19 (see BoM) | Purchased |
-| Item 6: IR transmitter + photodiode pair | Not yet purchased; compatibility with PA0 to be verified on the bench |
-| Item 17: mini strobe siren | Not yet purchased; confirm rated voltage and current before connecting |
-| Item 20: power / ground bus wiring | Not yet purchased |
+Numbering follows the BoM in section 3. **Received** means the part is physically in hand; it says nothing about whether it works. A row only reaches *tested* after that test has actually been run on hardware.
 
-Numbering follows the BoM in section 3.
+### 9.1 Component status
+
+| Item | Component | Received | Connected | Tested |
+|------|-----------|----------|-----------|--------|
+| 1-5, 7-16, 18, 19 | Core boards, sensors, modules, breadboard, jumpers | Yes | per stage below | per stage below |
+| 6 | IR transmitter + photodiode receiver pair | Yes | Yes | **Yes - passed** |
+| 17 | Mini strobe siren A-12-B (12 V) | **Yes** | **No** | **No - testing pending** |
+| 20 | Power / ground bus wiring | No | No | No - **design in progress** |
+
+### 9.2 Stage-wise checklist
+
+Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
+
+| Stage | Subsystem | Pin(s) | Test program | Status |
+|-------|-----------|--------|--------------|--------|
+| 1 | Green status LED | PA5 | `test_led.c` | Not recorded |
+| 2 | IR break-beam transmitter + receiver | PA0 | `test_ir_sensor.c` | **Complete - tested and passing** |
+| 3 | PIR | PA1 | `test_sensors.c` / `test_pir.c` | **Blocked** - PA1 reads permanently HIGH, under investigation |
+| 3 | SW-420 vibration | PA2 | `test_sensors.c` | Not recorded |
+| 4 | LDR light sensor | PA4 | `test_ldr.c` | Not recorded |
+| 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | Not recorded |
+| 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | Not recorded |
+| 7 | Buzzer + relay (dry, no load) | PA6/PA7 | `test_actuators.c` | Not recorded |
+| 8 | **12 V strobe siren via relay** | PA7 | `test_siren.c` | **Not started** - hardware received, code written, never run |
+| 9 | Integrated state machine | all | *(not written)* | Not started |
+
+"Not recorded" means no result has been logged here, not that the stage failed. Update the row when you run the stage.
+
+### 9.3 Open items
+
+* **PIR on PA1** - stuck HIGH. Firmware logic was audited and is correct; the lead is a ~4.3 V reading on the module's OUT pin and the fact that PA1 is not 5 V tolerant. Diagnostic procedure: assembly guide Stage 3.
+* **Siren** - received and confirmed 12 V from the packaging, but the **current rating is not printed on the unit or the box**. Measure it before any extended run and check it against the 1 A adapter budget in section 4.
+* **Bus wiring (item 20)** - *proposed approach only, nothing built.* The idea discussed was to reuse the existing relay module together with suitable wiring. Assessment: the relay is a **switch for the siren load**, not a power-distribution element, so it does not by itself satisfy item 20. What actually carries the rails today is the breadboard's power strips plus DuPont jumpers (item 19). Remaining work: decide whether dedicated bus wire or terminal blocks are needed for the final build, then implement and test. **Not implemented, not verified.**
 
 ## 10. License
 
