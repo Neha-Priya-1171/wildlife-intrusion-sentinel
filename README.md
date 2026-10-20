@@ -194,21 +194,23 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 |-------|-----------|--------|--------------|--------|
 | 1 | Green status LED | PA5 | `test_led.c` | Not recorded |
 | 2 | IR break-beam transmitter + receiver | PA0 | `test_ir_sensor.c` | **Complete - tested and passing** |
-| 3 | PIR | **PB5** | `test_pir.c` | **Retest pending** - moved off PA1 (stuck HIGH) onto a 5 V-tolerant pin |
-| 3 | SW-420 vibration | PA2 | `test_sensors.c` | Not recorded |
-| 4 | LDR light sensor | PA4 | `test_ldr.c` | Not recorded |
-| 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | Not recorded |
-| 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | Not recorded |
+| 3 | PIR | **PB5** | `test_pir.c` | **Still failing.** On PB5 the pin now reads stuck LOW: `pir_low_seen`=1, `pir_high_seen`=0, `pir_events`=0. Nothing arrives from the module. Deferred - excluded from the build via `PIR_FITTED 0` |
+| 3 | SW-420 vibration | PA2 | `test_sensors.c` | **Complete - tested and working** |
+| 4 | LDR light sensor | PA4 | `test_ldr.c` | **Complete - tested and working** |
+| 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | **Complete - tested and working** |
+| 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | **Complete - tested and working** |
 | 7 | Buzzers x2 (direct) | PA6/PB0 | `test_buzzer.c` | **Complete - both buzzers tested and working** (PA6 and PB0). PB0 was silent at first; resolved during bench diagnostics |
 | 7b | Zone indicator LEDs | PA5 (shared) / PA8 | `test_zones.c` | **Complete - tested and passing.** All five parts verified on hardware: each LED alone, both together, and a solid-LED breach on each side |
-| 8 | Relay (optional, for the siren) | PA7 | `test_actuators.c` | Not recorded - skippable while the siren is deferred |
-| 9 | 12 V strobe siren | PA7 | `test_siren.c` | **Deferred** - hardware received, code written, never run |
-| 10 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |
+| 8 | Relay (optional, for the siren) | PA7 | `test_actuators.c` | Relay clicks; no load attached |
+| 9 | 12 V strobe siren | PA7 | `test_siren.c` | **Deferred** - blocked on a barrel-jack-to-screw-terminal adapter to get wires off the 12 V supply. Build via `SIREN_FITTED 0` |
+| 10 | Integrated state machine | all | `firmware/app/main.c` | **Ready to run.** Configured `PIR_FITTED 0` / `SIREN_FITTED 0`, so it works on the IR beam + vibration sensor |
 | 11 | Live GUI simulation | - | `simulation/swis_gui.py` + `simulation/firmware/sim_main.c` | **Desktop side tested; never run against the board** |
 
 "Not recorded" means no result has been logged here, not that the stage failed. Update the row when you run the stage.
 
 ### 9.3 Open items
+
+* **The integrated firmware is configured for what actually works.** `PIR_FITTED 0` and `SIREN_FITTED 0` at the top of `main.c`. Detection runs on the **IR beam (PA0)** and the **vibration sensor (PA2)**, which can still confirm each other, so the two-sensor anti-false-alarm rule still means something. Set either flag back to 1 when the part comes good; nothing else changes.
 
 * **Zone indication verified on hardware.** `test_zones.c` passes all five parts: PA5 alone, PA8 alone, both together, then a breach on each side with the correct LED going solid. Both buzzers sound together in both breach parts; only the solid LED moves.
 * **Both buzzers now work** (PA6 and PB0). PB0 was silent at first and survived a buzzer swap, which pointed at the pin or its wiring rather than the part; it came good during bench diagnostics. The zone design that was built around the failure stays, because it is the better arrangement anyway: the LED carries the location and the buzzers only carry the noise, so the system keeps reporting which side was breached even if a buzzer dies later.

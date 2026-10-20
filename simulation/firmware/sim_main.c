@@ -56,6 +56,26 @@
 #define DARK_THRESHOLD      2500u   /* ADC reading above this = dark (see test_ldr.c) */
 #define LDR_DARK_IS_HIGH        1   /* set to 0 if your module reads LOW when dark  */
 
+/* ============ WHAT IS ACTUALLY FITTED AND WORKING ON THE BENCH ============
+ * Set a line to 0 and the firmware stops depending on that part. Nothing else needs
+ * changing, and the system stays fully functional on what is left.
+ *
+ *   PIR_FITTED 0   the PIR on PB5 is not producing an output yet. It is excluded
+ *                  from validation entirely, so it can never block a breach. The
+ *                  30 s warm-up is KEPT anyway - it is a useful "system starting"
+ *                  indication and costs nothing.
+ *   SIREN_FITTED 0 no 12 V siren on the relay contacts (no barrel-jack adapter yet).
+ *                  The relay is still driven, so it audibly clicks at the moment of a
+ *                  breach and the switching is demonstrated. Only the status text
+ *                  changes, so nothing claims a siren sounded when none is attached.
+ *
+ * With PIR_FITTED 0 the working detectors are the IR beam (PA0) and the vibration
+ * sensor (PA2). Those two can still confirm each other, so the two-sensor rule below
+ * still means something: break the beam AND tap the board within 2 s. If that is
+ * awkward during a demo, press D over Bluetooth for single-sensor mode. */
+#define PIR_FITTED              0
+#define SIREN_FITTED            0
+
 /* 1 = two sensors needed in daylight (fewer false alarms).
  * 0 = any single sensor triggers a breach at any time. */
 #define REQUIRE_SECOND_SENSOR   1
@@ -136,8 +156,12 @@ static void sensors_init(void)
 
 static uint8_t pir_active(void)
 {
+#if PIR_FITTED
     uint8_t v = gpio_read(PIR_PORT, PIR_PIN);
     return (uint8_t)(PIR_ACTIVE_HIGH ? v : !v);
+#else
+    return 0;                     /* not fitted - never votes, never blocks a breach */
+#endif
 }
 
 static uint8_t vib_active(void)
@@ -335,6 +359,12 @@ static void send_status(void)
     uart_puts(",FALSE=");     uart_putu(false_alarms);
     uart_puts(",LDR=");       uart_putu(ldr_value);
     uart_puts((breach_zone == ZONE_A) ? ",ZONE=A" : ",ZONE=B");
+#if !PIR_FITTED
+    uart_puts(",PIR=OFF");
+#endif
+#if !SIREN_FITTED
+    uart_puts(",SIREN=OFF");
+#endif
     uart_puts(is_night ? ",NIGHT" : ",DAY");
     uart_puts(demo_mode ? ",DEMO=1\r\n" : ",DEMO=0\r\n");
 }
@@ -528,7 +558,7 @@ int main(void)
         switch (state) {
 
         case ST_WARMUP:
-            lcd_top = "SWIS WARMING UP";
+            lcd_top = "SWIS STARTING";
             ir_flag = 0;                                 /* ignore triggers while settling */
             if ((now - state_since) >= PIR_WARMUP_MS) {
                 enter_state(ST_SECURE, now);
