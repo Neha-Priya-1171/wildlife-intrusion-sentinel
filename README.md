@@ -39,10 +39,10 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
 
 **Detection logic (target firmware behaviour)**
 
-1. **IDLE / SECURE** - green LED on, LCD shows `STATUS: SECURE`, CPU waits for an interrupt.
+1. **IDLE / SECURE** - green LED gives a short heartbeat flash every 2 s, LCD shows `STATUS: SECURE`, CPU waits for an interrupt. (A heartbeat rather than steady on, because **solid** is reserved to mean "this zone is breached".)
 2. **TRIGGER** - IR beam break (or vibration/PIR edge) raises an EXTI interrupt.
 3. **VALIDATE** - firmware checks the other sensors inside a short time window; the **LDR** reading is used to adjust for day/night/glare behaviour.
-4. **DETER** - the breached **zone's LED** lights to show which side; every fitted buzzer plays a varying pattern; the relay also switches the strobe siren if one is fitted.
+4. **DETER** - the breached **zone's LED goes solid** to show which side (PA5 for zone A, PA8 for zone B); every fitted buzzer plays a varying pattern; the relay also switches the strobe siren if one is fitted.
 5. **ALERT** - `ZONE 1: ANIMAL BREACH` is sent over USART1 → HC-05 → phone; LCD shows `STATUS: BREACH` until reset.
 
 This repository currently contains the **hardware bring-up test firmware** (one small program per subsystem). Integrated firmware comes after every block passes its test.
@@ -114,12 +114,11 @@ Estimated cost of the main list: **≈ ₹2,381**.
 |-----------|--------------|----------|-------|
 | **PA0** | IR receiver stage (NPN collector) | EXTI0 / digital in | Beam clear = LOW, beam broken = HIGH (rising edge). Polarity set by `IR_ACTIVE_LOW` in `board.h`. Black Pill KEY button is also on PA0 |
 | **PB0** | Buzzer 2 **+** (zone B) | GPIO out | One buzzer per pin - never share PA6. Optional: set `BUZ2_ENABLE` to 0 if it is not working |
-| **PA3** | Zone A indicator LED (via 220 Ω) | GPIO out | Lights when the **IR beam** side is breached |
-| **PA8** | Zone B indicator LED (via 220 Ω) | GPIO out | Lights when the **PIR / vibration** side is breached |
+| **PA8** | Zone B indicator LED (via 270 Ω) | GPIO out | Lights when the **PIR / vibration** side is breached. The only new LED needed |
 | **PB5** | PIR OUT | Digital in (polled) | **Moved here from PA1.** PB5 has no ADC function, so it is an FT (5 V tolerant) pin and accepts the module's ~4.3 V output. PA1 is 3.3 V-only and is now treated as suspect |
 | **PA2** | SW-420 DO | Digital in (EXTI2 capable) | Module powered from 3.3 V |
 | **PA4** | LDR module AO | ADC1_IN4 | Must never exceed 3.3 V |
-| **PA5** | Green LED (+) via 220 Ω | GPIO out | "SECURE" indicator |
+| **PA5** | Green LED (+) via 220 Ω | GPIO out | Two jobs: status indicator **and** the Zone A LED. Heartbeat flash = armed; **solid = zone A breached** |
 | **PA6** | Buzzer 1 **+** (direct, no transistor) | GPIO out | High = buzzer on. ~20 mA at 3.3 V, inside the 25 mA pin limit. The BC547 went to the IR receiver stage |
 | **PA7** | Relay module IN | GPIO out | Check module polarity (`RELAY_ACTIVE_LOW`). **For the siren only - nothing to do with the buzzers.** Optional while the siren is deferred |
 | **PA9** | HC-05 RXD | USART1_TX (AF7) | 9600 8N1 |
@@ -201,7 +200,7 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 | 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | Not recorded |
 | 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | Not recorded |
 | 7 | Buzzers x2 (direct) | PA6/PB0 | `test_buzzer.c` | **Buzzer 1 (PA6) works.** Buzzer 2 on PB0 silent - proven not to be the buzzer (swapped both), cause unresolved |
-| 7b | Zone indicator LEDs | PA3/PA8 | `test_zones.c` | **Not yet wired** - code written, never run |
+| 7b | Zone indicator LEDs | PA5 (shared) / PA8 | `test_zones.c` | **Not yet wired** - only PA8 needs a new LED; code written, never run |
 | 8 | Relay (optional, for the siren) | PA7 | `test_actuators.c` | Not recorded - skippable while the siren is deferred |
 | 9 | 12 V strobe siren | PA7 | `test_siren.c` | **Deferred** - hardware received, code written, never run |
 | 10 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |

@@ -11,7 +11,7 @@
  *    PA4  LDR module AO      ADC1_IN4       PA10 HC-05 TXD          USART1_RX
  *    PA5  Green status LED   GPIO out       PB6/PB7 LCD SCL/SDA     I2C1 (level shifter)
  *    PB0  Buzzer 2 (zone B)    GPIO out (optional, see BUZ2_ENABLE)
- *    PA3  Zone A indicator LED                PA8  Zone B indicator LED
+ *    PA5  doubles as the Zone A LED           PA8  Zone B indicator LED
  */
 #ifndef BOARD_H
 #define BOARD_H
@@ -60,10 +60,16 @@
  * so the system never loses the one piece of information that matters.
  *
  * Both LEDs are on PORT A on purpose. Port A is proven working on this board, so zone
- * indication does not depend on the port that is giving trouble. Each LED needs a
- * series resistor (220 ohm or the 270 ohm will do) to GND. */
+ * indication does not depend on the port that is giving trouble.
+ *
+ * ZONE A REUSES THE STATUS LED ON PA5. No extra LED and no extra wiring - the green
+ * LED that is already there does double duty. Because one pin now has two jobs, every
+ * indicator decision in the application is made in ONE place (see indicators() in
+ * main.c) so the status role and the zone role can never fight over PA5.
+ *
+ * Only ZONE B needs a new LED: PA8 -> 220 ohm (270 is fine) -> long leg, short leg GND. */
 #define ZONE_A_LED_PORT  GPIOA
-#define ZONE_A_LED_PIN   3
+#define ZONE_A_LED_PIN   5        /* shared with the status LED - see note above */
 #define ZONE_B_LED_PORT  GPIOA
 #define ZONE_B_LED_PIN   8
 #define ZONE_LEDS_ENABLE 1        /* 0 = no zone LEDs fitted, everything else still runs */

@@ -269,13 +269,23 @@ has a buzzer **and** an LED.
 
 | Zone | Watches | Buzzer | Indicator LED |
 |------|---------|--------|---------------|
-| **A** | IR beam (PA0) | PA6 | **PA3** |
-| **B** | PIR (PB5) + vibration (PA2) | PB0 | **PA8** |
+| **A** | IR beam (PA0) | PA6 | **PA5** - the status LED you already have |
+| **B** | PIR (PB5) + vibration (PA2) | PB0 | **PA8** - one new LED |
+
+**Only one new LED is needed.** Zone A reuses the green status LED already wired to PA5.
 
 | LED | Wiring |
 |-----|--------|
-| Zone A | **PA3** → 220 Ω (270 Ω is fine) → LED long leg; short leg → GND |
-| Zone B | **PA8** → 220 Ω → LED long leg; short leg → GND |
+| Zone A | nothing to do - it is the existing PA5 LED |
+| Zone B | **PA8** → 270 Ω → LED long leg; short leg → GND |
+
+> **PA5 does two jobs**, so every LED decision in the firmware is made in one function
+> (`indicators()` in `main.c`). Nothing else is allowed to touch PA5, or the status role
+> and the zone role would overwrite each other on the same pin.
+>
+> **SOLID means "this zone is breached", and only that.** That is why SECURE now shows a
+> brief heartbeat flash every 2 s instead of a steady light - so a steady LED always has
+> exactly one meaning.
 
 > **Why the LED carries the information, not the buzzer.** The LED says *which side* was
 > breached. The buzzers only make noise, and every fitted buzzer sounds for either zone.
@@ -290,11 +300,11 @@ has a buzzer **and** an LED.
 
 | Part | What happens | Tells you |
 |------|--------------|-----------|
-| 1 | zone A LED alone, 3 slow flashes | PA3 wired right |
-| 2 | zone B LED alone, 3 slow flashes | PA8 wired right |
+| 1 | zone A LED (PA5) alone, 3 slow flashes | the status LED responds |
+| 2 | zone B LED (PA8) alone, 3 slow flashes | the new LED is wired right |
 | 3 | both together, 2 flashes | both good |
-| 4 | **breach in zone A**: PA3 solid 4 s, buzzers sounding | the real behaviour |
-| 5 | **breach in zone B**: PA8 solid 4 s, buzzers sounding | same noise, other LED |
+| 4 | **breach in zone A**: PA5 solid 4 s, PA8 dark, buzzers sounding | the real behaviour |
+| 5 | **breach in zone B**: PA8 solid 4 s, PA5 dark, buzzers sounding | same noise, other LED |
 
 Parts 4 and 5 are the ones to watch. The buzzers do exactly the same thing in both -
 **only the LED moves**. That is the design working as intended.

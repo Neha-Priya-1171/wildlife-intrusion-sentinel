@@ -21,7 +21,7 @@
  *     PA2  SW-420 DO        polled input         PA9  HC-05 RXD (USART1 TX)
  *     PA4  LDR AO           ADC1_IN4             PA10 HC-05 TXD (USART1 RX)
  *     PA5  Green LED        SECURE indicator     PB6/PB7 LCD SCL/SDA (I2C1)
- *     PB0  Buzzer 2 (zone B, optional)          PA3/PA8 Zone A / Zone B LEDs
+ *     PB0  Buzzer 2 (zone B, optional)          PA5 = Zone A LED, PA8 = Zone B LED
  *
  * ZONES: each side of the farm has a buzzer and an LED. The LED says which side was
  * breached; the buzzers only make noise, so a dead buzzer never costs the location.
@@ -373,6 +373,51 @@ static void make_line2(char *out)
     out[i] = '\0';
 }
 
+/* ===================== Indicator LEDs - ONE decision point =====================
+ * PA5 is both the status LED and the zone A indicator, so every decision about either
+ * LED is made here and nowhere else. If the state machine also called led_set() the two
+ * roles would overwrite each other on the same pin.
+ *
+ *   WARMUP    PA5 slow blink                  settling, not armed yet
+ *   SECURE    PA5 short heartbeat flash       armed and healthy
+ *   VALIDATE  suspect zone's LED fast blink   checking for a second sensor
+ *   BREACH    breached zone's LED SOLID       <- this is the zone readout
+ *   COOLDOWN  breached zone's LED slow blink  still flagged
+ *
+ * SECURE is a heartbeat rather than steady-on deliberately: SOLID is reserved to mean
+ * "this zone is breached", so the two can never be confused on the shared pin. */
+static void indicators(uint32_t now)
+{
+    uint8_t a = 0, b = 0;
+
+    switch (state) {
+    case ST_WARMUP:
+        a = (uint8_t)((now / 500u) & 1u);
+        break;
+    case ST_SECURE:
+        a = (uint8_t)((now % 2000u) < 100u);          /* brief flash every 2 s */
+        break;
+    case ST_VALIDATE: {
+        uint8_t f = (uint8_t)((now / 150u) & 1u);
+        if (breach_zone == ZONE_A) a = f; else b = f;
+        break;
+    }
+    case ST_BREACH:
+        if (breach_zone == ZONE_A) a = 1; else b = 1;  /* SOLID = breached side */
+        break;
+    case ST_COOLDOWN: {
+        uint8_t f = (uint8_t)((now / 500u) & 1u);
+        if (breach_zone == ZONE_A) a = f; else b = f;
+        break;
+    }
+    default:
+        break;
+    }
+
+    zone_led_set(ZONE_A, a);
+    zone_led_set(ZONE_B, b);
+}
+
 /* ============================== MAIN ============================== */
 int main(void)
 {
@@ -483,8 +528,6 @@ int main(void)
         switch (state) {
 
         case ST_WARMUP:
-            led_set((uint8_t)((now / 500u) & 1u));       /* slow blink, non-blocking */
-            zone_leds_off();
             lcd_top = "SWIS WARMING UP";
             ir_flag = 0;                                 /* ignore triggers while settling */
             if ((now - state_since) >= PIR_WARMUP_MS) {
@@ -493,8 +536,6 @@ int main(void)
             break;
 
         case ST_SECURE:
-            led_set(1);                                  /* steady = armed */
-            zone_leds_off();                             /* no zone is alarming */
             lcd_top = "STATUS: SECURE";
             if (ir_flag || pir_active() || vib_active()) {
                 trigger_mask = 0;
@@ -522,9 +563,6 @@ int main(void)
              * sun glare and wind are what produce daytime false alarms. */
             needed = (uint8_t)((REQUIRE_SECOND_SENSOR && !is_night && !demo_mode) ? 2u : 1u);
 
-            led_set((uint8_t)((now / 100u) & 1u));       /* fast blink = checking */
-            /* the suspect zone's LED blinks while we look for confirmation */
-            zone_led_set(breach_zone, (uint8_t)((now / 250u) & 1u));
             lcd_top = "CHECKING...";
 
             if (votes >= needed) {
@@ -542,10 +580,6 @@ int main(void)
         }
 
         case ST_BREACH:
-            led_set((uint8_t)((now / 100u) & 1u));       /* fast blink = alarm */
-            /* SOLID zone LED - the one thing that says which side was breached, and it
-             * does not depend on any buzzer working. */
-            zone_led_set(breach_zone, 1);
             lcd_top = "STATUS: BREACH";
             buzzer_pattern(now, 1);                      /* every fitted buzzer sounds */
             if ((now - state_since) >= BREACH_MS) {
@@ -557,8 +591,6 @@ int main(void)
             break;
 
         case ST_COOLDOWN:
-            led_set(0);
-            zone_led_set(breach_zone, (uint8_t)((now / 500u) & 1u)); /* slow: still flagged */
             lcd_top = "COOLDOWN";
             relay_set(0);
             buzzer_pattern(now, 0);
@@ -573,6 +605,8 @@ int main(void)
             enter_state(ST_SECURE, now);
             break;
         }
+
+        indicators(now);          /* all LED decisions, including the shared PA5 */
 
         /* ---------- LCD: only rewrite when the message actually changes ---------- */
         if (lcd_ok && lcd_top != lcd_shown && (now - last_lcd) >= LCD_REFRESH_MS) {
