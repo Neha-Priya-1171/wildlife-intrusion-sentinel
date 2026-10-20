@@ -42,7 +42,7 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
 1. **IDLE / SECURE** - green LED on, LCD shows `STATUS: SECURE`, CPU waits for an interrupt.
 2. **TRIGGER** - IR beam break (or vibration/PIR edge) raises an EXTI interrupt.
 3. **VALIDATE** - firmware checks the other sensors inside a short time window; the **LDR** reading is used to adjust for day/night/glare behaviour.
-4. **DETER** - both buzzers play a varying pattern; the relay also switches the strobe siren if one is fitted.
+4. **DETER** - the breached **zone's LED** lights to show which side; every fitted buzzer plays a varying pattern; the relay also switches the strobe siren if one is fitted.
 5. **ALERT** - `ZONE 1: ANIMAL BREACH` is sent over USART1 → HC-05 → phone; LCD shows `STATUS: BREACH` until reset.
 
 This repository currently contains the **hardware bring-up test firmware** (one small program per subsystem). Integrated firmware comes after every block passes its test.
@@ -113,7 +113,9 @@ Estimated cost of the main list: **≈ ₹2,381**.
 | STM32 pin | Connected to | Function | Notes |
 |-----------|--------------|----------|-------|
 | **PA0** | IR receiver stage (NPN collector) | EXTI0 / digital in | Beam clear = LOW, beam broken = HIGH (rising edge). Polarity set by `IR_ACTIVE_LOW` in `board.h`. Black Pill KEY button is also on PA0 |
-| **PB0** | Buzzer 2 **+** (direct) | GPIO out | Enabled (`BUZ2_ENABLE` = 1 in `board.h`). One buzzer per pin - never share PA6 between two |
+| **PB0** | Buzzer 2 **+** (zone B) | GPIO out | One buzzer per pin - never share PA6. Optional: set `BUZ2_ENABLE` to 0 if it is not working |
+| **PA3** | Zone A indicator LED (via 220 Ω) | GPIO out | Lights when the **IR beam** side is breached |
+| **PA8** | Zone B indicator LED (via 220 Ω) | GPIO out | Lights when the **PIR / vibration** side is breached |
 | **PB5** | PIR OUT | Digital in (polled) | **Moved here from PA1.** PB5 has no ADC function, so it is an FT (5 V tolerant) pin and accepts the module's ~4.3 V output. PA1 is 3.3 V-only and is now treated as suspect |
 | **PA2** | SW-420 DO | Digital in (EXTI2 capable) | Module powered from 3.3 V |
 | **PA4** | LDR module AO | ADC1_IN4 | Must never exceed 3.3 V |
@@ -150,7 +152,8 @@ Estimated cost of the main list: **≈ ₹2,381**.
         ├── test_sensors.c     # PIR (PB5) + vibration (PA2)
         ├── test_pir.c         # simple PIR-only test on PB5
         ├── test_siren.c       # 12 V strobe siren via the PA7 relay
-        ├── test_buzzer.c      # buzzer on PA6, direct drive, active/passive check
+        ├── test_buzzer.c      # buzzers on PA6/PB0, direct drive, active/passive check
+        ├── test_zones.c       # two-zone LEDs (PA3/PA8) + per-zone breach demo
         ├── test_ldr.c         # (bonus) PA4 ADC
         ├── test_lcd.c         # I2C1 16x2 LCD
         ├── test_bluetooth.c   # USART1 + HC-05
@@ -197,7 +200,8 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 | 4 | LDR light sensor | PA4 | `test_ldr.c` | Not recorded |
 | 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | Not recorded |
 | 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | Not recorded |
-| 7 | Buzzers x2 (direct) | PA6/PB0 | `test_buzzer.c` | **Buzzer 1 tested and working**; buzzer 2 on PB0 not yet wired |
+| 7 | Buzzers x2 (direct) | PA6/PB0 | `test_buzzer.c` | **Buzzer 1 (PA6) works.** Buzzer 2 on PB0 silent - proven not to be the buzzer (swapped both), cause unresolved |
+| 7b | Zone indicator LEDs | PA3/PA8 | `test_zones.c` | **Not yet wired** - code written, never run |
 | 8 | Relay (optional, for the siren) | PA7 | `test_actuators.c` | Not recorded - skippable while the siren is deferred |
 | 9 | 12 V strobe siren | PA7 | `test_siren.c` | **Deferred** - hardware received, code written, never run |
 | 10 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |
@@ -207,6 +211,7 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 
 ### 9.3 Open items
 
+* **Buzzer 2 on PB0 is silent.** Buzzer 1 on PA6 works. Swapping the two buzzers over did not move the fault, so the parts are fine and the problem is PB0, its wire or its breadboard row. **Unresolved, and deliberately no longer blocking:** the design now puts zone indication on two LEDs (PA3/PA8, both on the proven port A) rather than on the buzzers, so the system still reports which side was breached with only one working buzzer. Worth noting that PB0 being dead may also be a warning about PB5 (PIR) and PB6/PB7 (LCD), which are on the same port and not yet tested.
 * **PIR moved to PB5** - PA1 read permanently HIGH and never changed. The firmware logic was audited and is correct, so the fault is electrical. Rather than keep debugging PA1, the PIR now lives on **PB5**, which unlike PA1 has no ADC function and therefore tolerates 5 V - so the module's measured ~4.3 V output is within spec there. Rerun `test_pir.c` on the new pin. PA1 remains unproven and should not be reused until tested.
 * **Siren** - received and confirmed 12 V from the packaging, but the **current rating is not printed on the unit or the box**. Measure it before any extended run and check it against the 1 A adapter budget in section 4.
 * **Bus wiring (item 20)** - *proposed approach only, nothing built.* The idea discussed was to reuse the existing relay module together with suitable wiring. Assessment: the relay is a **switch for the siren load**, not a power-distribution element, so it does not by itself satisfy item 20. What actually carries the rails today is the breadboard's power strips plus DuPont jumpers (item 19). Remaining work: decide whether dedicated bus wire or terminal blocks are needed for the final build, then implement and test. **Not implemented, not verified.**

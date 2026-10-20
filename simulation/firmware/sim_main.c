@@ -21,7 +21,11 @@
  *     PA2  SW-420 DO        polled input         PA9  HC-05 RXD (USART1 TX)
  *     PA4  LDR AO           ADC1_IN4             PA10 HC-05 TXD (USART1 RX)
  *     PA5  Green LED        SECURE indicator     PB6/PB7 LCD SCL/SDA (I2C1)
- *     PB0  Buzzer 2 (direct, optional - BUZ2_ENABLE in board.h)
+ *     PB0  Buzzer 2 (zone B, optional)          PA3/PA8 Zone A / Zone B LEDs
+ *
+ * ZONES: each side of the farm has a buzzer and an LED. The LED says which side was
+ * breached; the buzzers only make noise, so a dead buzzer never costs the location.
+ * The heartbeat carries ZONE=A or ZONE=B so the GUI can show the right side.
  *
  * STATE MACHINE
  *     WARMUP -> SECURE -> VALIDATE -> BREACH -> COOLDOWN -> SECURE
@@ -56,6 +60,11 @@
  * 0 = any single sensor triggers a breach at any time. */
 #define REQUIRE_SECOND_SENSOR   1
 
+/* Which side of the farm each sensor watches. Swap these to re-map a sensor. */
+#define ZONE_OF_IR    ZONE_A
+#define ZONE_OF_PIR   ZONE_B
+#define ZONE_OF_VIB   ZONE_B
+
 /* ============================ STATE ============================ */
 typedef enum { ST_WARMUP, ST_SECURE, ST_VALIDATE, ST_BREACH, ST_COOLDOWN } state_t;
 
@@ -72,6 +81,7 @@ volatile uint8_t  deter_on     = 0;   /* 1 while the buzzer and siren are runnin
 volatile uint8_t  demo_mode    = 0;   /* 1 = one sensor is enough (toggle with D)    */
 
 static uint32_t state_since = 0;      /* millis() when the current state began       */
+volatile uint8_t  breach_zone  = ZONE_A; /* which side fired: ZONE_A or ZONE_B       */
 
 /* set by the IR interrupt, cleared by the main loop */
 static volatile uint8_t  ir_flag    = 0;
@@ -324,6 +334,7 @@ static void send_status(void)
     uart_puts(",BREACH=");    uart_putu(breach_count);
     uart_puts(",FALSE=");     uart_putu(false_alarms);
     uart_puts(",LDR=");       uart_putu(ldr_value);
+    uart_puts((breach_zone == ZONE_A) ? ",ZONE=A" : ",ZONE=B");
     uart_puts(is_night ? ",NIGHT" : ",DAY");
     uart_puts(demo_mode ? ",DEMO=1\r\n" : ",DEMO=0\r\n");
 }
@@ -347,7 +358,7 @@ static void enter_state(state_t s, uint32_t now)
 /* Build "DAY   B=12" / "NIGHT B=12" into a 17-byte buffer. */
 static void make_line2(char *out)
 {
-    const char *tag = is_night ? "NIGHT B=" : "DAY   B=";
+    const char *tag = (breach_zone == ZONE_A) ? "ZONE A  B=" : "ZONE B  B=";
     uint32_t n = breach_count;
     int i = 0;
 
@@ -379,6 +390,7 @@ int main(void)
     led_init();
     relay_init();                 /* relay OFF first, so the siren cannot bang at reset */
     buzzer_init();
+    zone_leds_init();             /* both zone LEDs off */
     sensors_init();
     ir_init();
     adc1_init();
@@ -441,6 +453,7 @@ int main(void)
                 case 'R': case 'r':
                     relay_set(0);
                     buzzer_pattern(now, 0);
+                    zone_leds_off();
                     deter_on = 0;
                     trigger_mask = 0;
                     enter_state(ST_SECURE, now);
@@ -471,6 +484,7 @@ int main(void)
 
         case ST_WARMUP:
             led_set((uint8_t)((now / 500u) & 1u));       /* slow blink, non-blocking */
+            zone_leds_off();
             lcd_top = "SWIS WARMING UP";
             ir_flag = 0;                                 /* ignore triggers while settling */
             if ((now - state_since) >= PIR_WARMUP_MS) {
@@ -480,9 +494,15 @@ int main(void)
 
         case ST_SECURE:
             led_set(1);                                  /* steady = armed */
+            zone_leds_off();                             /* no zone is alarming */
             lcd_top = "STATUS: SECURE";
             if (ir_flag || pir_active() || vib_active()) {
                 trigger_mask = 0;
+                /* The FIRST sensor to fire decides the zone - that is the side the
+                 * animal crossed, even if the other side confirms a moment later. */
+                if (ir_flag)           breach_zone = ZONE_OF_IR;
+                else if (pir_active()) breach_zone = ZONE_OF_PIR;
+                else                   breach_zone = ZONE_OF_VIB;
                 if (ir_flag)      { trigger_mask |= 0x01u; ir_flag = 0; }
                 if (pir_active())   trigger_mask |= 0x02u;
                 if (vib_active())   trigger_mask |= 0x04u;
@@ -503,6 +523,8 @@ int main(void)
             needed = (uint8_t)((REQUIRE_SECOND_SENSOR && !is_night && !demo_mode) ? 2u : 1u);
 
             led_set((uint8_t)((now / 100u) & 1u));       /* fast blink = checking */
+            /* the suspect zone's LED blinks while we look for confirmation */
+            zone_led_set(breach_zone, (uint8_t)((now / 250u) & 1u));
             lcd_top = "CHECKING...";
 
             if (votes >= needed) {
@@ -521,8 +543,11 @@ int main(void)
 
         case ST_BREACH:
             led_set((uint8_t)((now / 100u) & 1u));       /* fast blink = alarm */
+            /* SOLID zone LED - the one thing that says which side was breached, and it
+             * does not depend on any buzzer working. */
+            zone_led_set(breach_zone, 1);
             lcd_top = "STATUS: BREACH";
-            buzzer_pattern(now, 1);
+            buzzer_pattern(now, 1);                      /* every fitted buzzer sounds */
             if ((now - state_since) >= BREACH_MS) {
                 relay_set(0);
                 buzzer_pattern(now, 0);
@@ -533,6 +558,7 @@ int main(void)
 
         case ST_COOLDOWN:
             led_set(0);
+            zone_led_set(breach_zone, (uint8_t)((now / 500u) & 1u)); /* slow: still flagged */
             lcd_top = "COOLDOWN";
             relay_set(0);
             buzzer_pattern(now, 0);

@@ -262,6 +262,46 @@ target built, or the board is not running.
 
 Nothing in the Watch window is needed for this test.
 
+### Stage 7b - Zone indicator LEDs (PA3 and PA8) · `test_zones.c`
+
+The farm is split into two zones, one along each long edge of the breadboard. Each zone
+has a buzzer **and** an LED.
+
+| Zone | Watches | Buzzer | Indicator LED |
+|------|---------|--------|---------------|
+| **A** | IR beam (PA0) | PA6 | **PA3** |
+| **B** | PIR (PB5) + vibration (PA2) | PB0 | **PA8** |
+
+| LED | Wiring |
+|-----|--------|
+| Zone A | **PA3** → 220 Ω (270 Ω is fine) → LED long leg; short leg → GND |
+| Zone B | **PA8** → 220 Ω → LED long leg; short leg → GND |
+
+> **Why the LED carries the information, not the buzzer.** The LED says *which side* was
+> breached. The buzzers only make noise, and every fitted buzzer sounds for either zone.
+> So a dead buzzer costs you volume but never costs you the location - which is the part
+> that actually matters. This is why the PB0 buzzer being silent does not hold the project
+> up.
+>
+> **Both zone LEDs are on port A on purpose.** Port A is proven working on this board.
+> Putting zone indication on the port that is giving trouble would defeat the point.
+
+**Test:** build `test_zones.c` + `common/board.c`.
+
+| Part | What happens | Tells you |
+|------|--------------|-----------|
+| 1 | zone A LED alone, 3 slow flashes | PA3 wired right |
+| 2 | zone B LED alone, 3 slow flashes | PA8 wired right |
+| 3 | both together, 2 flashes | both good |
+| 4 | **breach in zone A**: PA3 solid 4 s, buzzers sounding | the real behaviour |
+| 5 | **breach in zone B**: PA8 solid 4 s, buzzers sounding | same noise, other LED |
+
+Parts 4 and 5 are the ones to watch. The buzzers do exactly the same thing in both -
+**only the LED moves**. That is the design working as intended.
+
+**Nothing fitted yet?** Set `ZONE_LEDS_ENABLE` to `0` in `board.h` and every LED call
+becomes a no-op; the rest of the system is unaffected.
+
 ### Stage 8 - Relay (PA7) and the 12 V siren · `test_actuators.c`, `test_siren.c`
 
 > **OPTIONAL - currently deferred.** The buzzers in Stage 7 are the working deterrent.

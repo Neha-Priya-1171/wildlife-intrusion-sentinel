@@ -10,7 +10,8 @@
  *    PA2  SW-420 DO          GPIO in        PA9  HC-05 RXD          USART1_TX
  *    PA4  LDR module AO      ADC1_IN4       PA10 HC-05 TXD          USART1_RX
  *    PA5  Green status LED   GPIO out       PB6/PB7 LCD SCL/SDA     I2C1 (level shifter)
- *    PB0  Spare buzzer 2       GPIO out (optional, see BUZ2_ENABLE)
+ *    PB0  Buzzer 2 (zone B)    GPIO out (optional, see BUZ2_ENABLE)
+ *    PA3  Zone A indicator LED                PA8  Zone B indicator LED
  */
 #ifndef BOARD_H
 #define BOARD_H
@@ -51,6 +52,22 @@
 #define RELAY_PORT   GPIOA
 #define RELAY_PIN    7
 
+/* ---------- Zone indicator LEDs ----------
+ * The farm is split into two zones, one along each long edge of the breadboard. Each
+ * zone has a buzzer and an LED. The LED is what says WHICH SIDE the breach is on; the
+ * buzzers only make noise. That separation is deliberate: if a zone's buzzer is dead,
+ * the other zone's buzzer still sounds the alarm and the correct zone LED still lights,
+ * so the system never loses the one piece of information that matters.
+ *
+ * Both LEDs are on PORT A on purpose. Port A is proven working on this board, so zone
+ * indication does not depend on the port that is giving trouble. Each LED needs a
+ * series resistor (220 ohm or the 270 ohm will do) to GND. */
+#define ZONE_A_LED_PORT  GPIOA
+#define ZONE_A_LED_PIN   3
+#define ZONE_B_LED_PORT  GPIOA
+#define ZONE_B_LED_PIN   8
+#define ZONE_LEDS_ENABLE 1        /* 0 = no zone LEDs fitted, everything else still runs */
+
 /* ---------- Module polarity - change here if YOUR module behaves the opposite way ---------- */
 #define IR_ACTIVE_LOW     0   /* 0 = discrete IR LED + photodiode + NPN stage (PA0 goes HIGH when beam is broken).
                                  Set to 1 only if you use a ready-made break-beam module whose OUT goes LOW on break. */
@@ -85,6 +102,13 @@ uint8_t  gpio_read(GPIO_TypeDef *p, uint8_t pin);
  * buzzer_set() drives BOTH buzzers together when BUZ2_ENABLE is 1. */
 void     buzzer_init(void);
 void     buzzer_set(uint8_t on);
+
+/* Zone indicators. zone is 0 for zone A, 1 for zone B. */
+#define ZONE_A  0u
+#define ZONE_B  1u
+void     zone_leds_init(void);
+void     zone_led_set(uint8_t zone, uint8_t on);
+void     zone_leds_off(void);
 
 /* Status LED helpers (PA5) */
 void     led_init(void);

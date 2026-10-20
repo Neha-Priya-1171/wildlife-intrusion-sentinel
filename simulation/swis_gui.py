@@ -20,7 +20,7 @@ Protocol (see sim_main.c):
     EV,SRC=IR|PIR|VIB
     ST,<STATE>,DETER=0|1
     ALERT,ZONE1,ANIMAL BREACH
-    SWIS,STATE=..,BREACH=..,FALSE=..,LDR=..,DAY|NIGHT,DEMO=0|1
+    SWIS,STATE=..,BREACH=..,FALSE=..,LDR=..,ZONE=A|B,DAY|NIGHT,DEMO=0|1
 """
 
 import argparse
@@ -170,8 +170,9 @@ class DemoSource(threading.Thread):
         while not self.stop_flag.is_set():
             # 1 Hz heartbeat, exactly like the firmware
             ldr = 1800 + int(700 * math.sin(t / 9.0))
-            self._emit("SWIS,STATE=SECURE,BREACH=%d,FALSE=%d,LDR=%d,DAY,DEMO=1"
-                       % (breaches, false_alarms, ldr))
+            zone = "A" if breaches % 2 == 0 else "B"
+            self._emit("SWIS,STATE=SECURE,BREACH=%d,FALSE=%d,LDR=%d,ZONE=%s,DAY,DEMO=1"
+                       % (breaches, false_alarms, ldr, zone))
             t += 1.0
 
             if self.manual.is_set() or time.time() >= next_auto:
@@ -250,6 +251,7 @@ class App(tk.Tk):
         self.false_alarms = 0
         self.ldr = 0
         self.demo_flag = False
+        self.zone = "A"           # which side of the farm the breach is on
         self.connected = False
 
         self.animal_phase = "hidden"     # hidden | entering | grazing | fleeing
@@ -301,7 +303,7 @@ class App(tk.Tk):
 
         self.stat_widgets = {}
         for key, caption in (("breaches", "BREACHES"), ("false", "FILTERED"),
-                             ("ldr", "LIGHT"), ("mode", "TIME")):
+                             ("zone", "ZONE"), ("ldr", "LIGHT"), ("mode", "TIME")):
             cell = tk.Frame(strip, bg=PANEL)
             cell.pack(side="left", padx=16)
             val = tk.Label(cell, text="0", font=self.f_num, fg=TEXT, bg=PANEL)
@@ -385,6 +387,7 @@ class App(tk.Tk):
             self.ldr = int(self._field(parts, "LDR") or self.ldr)
             self.night = "NIGHT" in parts
             self.demo_flag = self._field(parts, "DEMO") == "1"
+            self.zone = self._field(parts, "ZONE") or self.zone
 
     @staticmethod
     def _field(parts, key):
@@ -520,6 +523,21 @@ class App(tk.Tk):
         # ---- deterrent: strobe lamp + buzzer, on the farm side ----
         self._deterrent(c, breach or self.deter)
 
+        # ---- zone indicator LEDs, mirroring the real PA3 / PA8 LEDs ----
+        alarmed = self.state in ("BREACH", "COOLDOWN", "VALIDATE")
+        for name, zx in (("A", 430), ("B", 620)):
+            hit = alarmed and self.zone == name
+            if hit and self.state == "VALIDATE":
+                hit = (self.frame // 8) % 2          # blinking while checking
+            col = "#ff3b3b" if hit else "#3d4654"
+            c.create_rectangle(zx - 26, GROUND_Y - 150, zx + 26, GROUND_Y - 120,
+                               fill="#1b2029", width=0)
+            c.create_oval(zx - 9, GROUND_Y - 143, zx + 9, GROUND_Y - 125,
+                          fill=col, width=0)
+            c.create_text(zx, GROUND_Y - 160, text="ZONE " + name,
+                          fill="#ffffff" if self.night else "#3b3010",
+                          font=self.f_small)
+
         # ---- sensor lamps ----
         for i, name in enumerate(("IR", "PIR", "VIB")):
             lx = 24 + i * 78
@@ -600,6 +618,9 @@ class App(tk.Tk):
         self.stat_widgets["false"].config(text=str(self.false_alarms))
         self.stat_widgets["ldr"].config(text=str(self.ldr))
         self.stat_widgets["mode"].config(text="NIGHT" if self.night else "DAY")
+        self.stat_widgets["zone"].config(
+            text=self.zone,
+            fg="#ef4444" if self.state in ("BREACH", "COOLDOWN") else TEXT)
 
     # -------------------------------------------------- input
     def _on_space(self, _evt):

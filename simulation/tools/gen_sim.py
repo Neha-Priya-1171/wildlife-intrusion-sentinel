@@ -34,7 +34,11 @@ NEW_HEADER = '''/**
  *     PA2  SW-420 DO        polled input         PA9  HC-05 RXD (USART1 TX)
  *     PA4  LDR AO           ADC1_IN4             PA10 HC-05 TXD (USART1 RX)
  *     PA5  Green LED        SECURE indicator     PB6/PB7 LCD SCL/SDA (I2C1)
- *     PB0  Buzzer 2 (direct, optional - BUZ2_ENABLE in board.h)
+ *     PB0  Buzzer 2 (zone B, optional)          PA3/PA8 Zone A / Zone B LEDs
+ *
+ * ZONES: each side of the farm has a buzzer and an LED. The LED says which side was
+ * breached; the buzzers only make noise, so a dead buzzer never costs the location.
+ * The heartbeat carries ZONE=A or ZONE=B so the GUI can show the right side.
  *
  * STATE MACHINE
  *     WARMUP -> SECURE -> VALIDATE -> BREACH -> COOLDOWN -> SECURE

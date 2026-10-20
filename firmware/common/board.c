@@ -74,6 +74,34 @@ void buzzer_set(uint8_t on)
 #endif
 }
 
+/* ---- Zone indicator LEDs ----
+ * These, not the buzzers, are what tell you which side of the farm was breached. */
+void zone_leds_init(void)
+{
+#if ZONE_LEDS_ENABLE
+    gpio_write(ZONE_A_LED_PORT, ZONE_A_LED_PIN, 0);
+    gpio_mode(ZONE_A_LED_PORT, ZONE_A_LED_PIN, BRD_MODE_OUT);
+    gpio_write(ZONE_B_LED_PORT, ZONE_B_LED_PIN, 0);
+    gpio_mode(ZONE_B_LED_PORT, ZONE_B_LED_PIN, BRD_MODE_OUT);
+#endif
+}
+
+void zone_led_set(uint8_t zone, uint8_t on)
+{
+#if ZONE_LEDS_ENABLE
+    if (zone == ZONE_A) gpio_write(ZONE_A_LED_PORT, ZONE_A_LED_PIN, on);
+    else                gpio_write(ZONE_B_LED_PORT, ZONE_B_LED_PIN, on);
+#else
+    (void)zone; (void)on;
+#endif
+}
+
+void zone_leds_off(void)
+{
+    zone_led_set(ZONE_A, 0);
+    zone_led_set(ZONE_B, 0);
+}
+
 void led_init(void)
 {
     gpio_write(LED_PORT, LED_PIN, 0);
