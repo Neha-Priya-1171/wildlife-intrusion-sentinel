@@ -16,7 +16,7 @@
  *        (same Keil options and include path as main.c)
  *
  * PIN MAP (from board.h - do not change it here)
- *     PA0  IR receiver      EXTI0 interrupt      PA6  Buzzer via NPN
+ *     PA0  IR receiver      EXTI0 interrupt      PA6  Buzzer (direct, no NPN)
  *     PB5  PIR OUT          polled input         PA7  Relay -> 12 V siren
  *     PA2  SW-420 DO        polled input         PA9  HC-05 RXD (USART1 TX)
  *     PA4  LDR AO           ADC1_IN4             PA10 HC-05 TXD (USART1 RX)

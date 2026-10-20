@@ -10,6 +10,7 @@
  *    PA2  SW-420 DO          GPIO in        PA9  HC-05 RXD          USART1_TX
  *    PA4  LDR module AO      ADC1_IN4       PA10 HC-05 TXD          USART1_RX
  *    PA5  Green status LED   GPIO out       PB6/PB7 LCD SCL/SDA     I2C1 (level shifter)
+ *    PB0  Spare buzzer 2       GPIO out (optional, see BUZ2_ENABLE)
  */
 #ifndef BOARD_H
 #define BOARD_H
@@ -32,8 +33,21 @@
 #define LDR_PIN      4
 #define LED_PORT     GPIOA
 #define LED_PIN      5
+/* Buzzer: driven DIRECTLY from the GPIO pin, no transistor.
+ * The original design used an NPN low-side switch so the buzzer could run from 5 V, but
+ * the only BC547 on hand went into the IR receiver stage (assembly guide, Stage 2), and
+ * a working circuit is not worth dismantling. A small 12 mm active buzzer straight on the
+ * pin runs at 3.3 V instead: quieter, but around 20 mA, inside the 25 mA an STM32F401 pin
+ * is rated for. Wire buzzer + to the pin and buzzer - to GND. */
 #define BUZ_PORT     GPIOA
 #define BUZ_PIN      6
+
+/* Optional SECOND buzzer on PB0, for the spare one in the kit. Two buzzers must never
+ * share one pin - that doubles the current past the pin's limit - so the spare gets its
+ * own. Set BUZ2_ENABLE to 1 only once PB0 is actually wired. */
+#define BUZ2_PORT    GPIOB
+#define BUZ2_PIN     0
+#define BUZ2_ENABLE  0
 #define RELAY_PORT   GPIOA
 #define RELAY_PIN    7
 

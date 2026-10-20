@@ -64,8 +64,8 @@ This repository currently contains the **hardware bring-up test firmware** (one 
 | 11 | 16×2 character LCD with PCF8574 I2C backpack | 1 | Address usually 0x27 or 0x3F |
 | 12 | 4-channel bidirectional 3.3 V ↔ 5 V logic level converter | 1 | Used on the I2C lines |
 | 13 | HC-05 Bluetooth module | 1 | 9600 baud in data mode |
-| 14 | Active piezo buzzer (5 V) | 1 | Active = built-in oscillator |
-| 15 | NPN transistor BC547 (or 2N2222) | 1 | Buzzer driver |
+| 14 | 12 mm buzzer (3-5 V) | 2 | Driven directly from PA6 at 3.3 V. Active (built-in oscillator) is what the firmware expects; `test_buzzer.c` tells you which type you have. Spare can go on PB0 |
+| 15 | NPN transistor BC547 (or 2N2222) | 1 | **Used by the IR receiver stage**, not the buzzer. The buzzer is driven straight from PA6 |
 | 16 | 5 V single-channel opto-isolated relay module | 1 | Check active-high/low |
 | 17 | Mini strobe wired siren (model **A-12-B**, red) | 1 | Replaces the unavailable 5 V flashing lamp. **12 V DC confirmed** from the packaging; current rating is **not** printed and must be measured. Two flying leads, switched from the 12 V adapter via the relay. **Received - testing pending** |
 | 18 | 830-point breadboard | 1 | |
@@ -76,8 +76,9 @@ This repository currently contains the **hardware bring-up test firmware** (one 
 
 | Part | Qty | Purpose |
 |------|-----|---------|
-| 1 kΩ resistor | 1 | NPN base resistor (buzzer driver) |
+| 1 kΩ resistor | 1 | No longer needed - the buzzer is driven directly. Keep as spare |
 | 220 Ω resistor (second) | 1 | IR transmitter LED current limit (only one 220 Ω is on hand, for the green LED) |
+| 270 Ω resistor | 1 | Temporary series resistor for the first buzzer power-up only; removed afterwards |
 | NPN transistor BC547 / 2N2222 (extra) | 2 | IR receiver stage (the first one is used for the buzzer) |
 | 10 kΩ resistor | 1 | IR receiver collector pull-up |
 | 10 kΩ + 20 kΩ resistors | 2 each | Spare voltage divider if any sensor output measures above 3.3 V |
@@ -111,11 +112,12 @@ Estimated cost of the main list: **≈ ₹2,381**.
 | STM32 pin | Connected to | Function | Notes |
 |-----------|--------------|----------|-------|
 | **PA0** | IR receiver stage (NPN collector) | EXTI0 / digital in | Beam clear = LOW, beam broken = HIGH (rising edge). Polarity set by `IR_ACTIVE_LOW` in `board.h`. Black Pill KEY button is also on PA0 |
+| **PB0** | Spare buzzer 2 **+** (optional) | GPIO out | Only if `BUZ2_ENABLE` is set in `board.h`. Never share PA6 between two buzzers |
 | **PB5** | PIR OUT | Digital in (polled) | **Moved here from PA1.** PB5 has no ADC function, so it is an FT (5 V tolerant) pin and accepts the module's ~4.3 V output. PA1 is 3.3 V-only and is now treated as suspect |
 | **PA2** | SW-420 DO | Digital in (EXTI2 capable) | Module powered from 3.3 V |
 | **PA4** | LDR module AO | ADC1_IN4 | Must never exceed 3.3 V |
 | **PA5** | Green LED (+) via 220 Ω | GPIO out | "SECURE" indicator |
-| **PA6** | Buzzer via NPN (1 kΩ on base) | GPIO out | High = buzzer on |
+| **PA6** | Buzzer **+** (direct, no transistor) | GPIO out | High = buzzer on. ~20 mA at 3.3 V, inside the 25 mA pin limit. The BC547 went to the IR receiver stage |
 | **PA7** | Relay module IN | GPIO out | Check module polarity (`RELAY_ACTIVE_LOW`) |
 | **PA9** | HC-05 RXD | USART1_TX (AF7) | 9600 8N1 |
 | **PA10** | HC-05 TXD | USART1_RX (AF7) | |
@@ -147,6 +149,7 @@ Estimated cost of the main list: **≈ ₹2,381**.
         ├── test_sensors.c     # PIR (PB5) + vibration (PA2)
         ├── test_pir.c         # simple PIR-only test on PB5
         ├── test_siren.c       # 12 V strobe siren via the PA7 relay
+        ├── test_buzzer.c      # buzzer on PA6, direct drive, active/passive check
         ├── test_ldr.c         # (bonus) PA4 ADC
         ├── test_lcd.c         # I2C1 16x2 LCD
         ├── test_bluetooth.c   # USART1 + HC-05
@@ -193,7 +196,7 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 | 4 | LDR light sensor | PA4 | `test_ldr.c` | Not recorded |
 | 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | Not recorded |
 | 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | Not recorded |
-| 7 | Buzzer + relay (dry, no load) | PA6/PA7 | `test_actuators.c` | Not recorded |
+| 7 | Buzzer (direct) + relay (dry) | PA6/PA7 | `test_buzzer.c`, `test_actuators.c` | Not recorded |
 | 8 | **12 V strobe siren via relay** | PA7 | `test_siren.c` | **Not started** - hardware received, code written, never run |
 | 9 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |
 | 10 | Live GUI simulation | - | `simulation/swis_gui.py` + `simulation/firmware/sim_main.c` | **Desktop side tested; never run against the board** |

@@ -1,8 +1,10 @@
 /**
  * @file    test_actuators.c
- * @brief   TEST 6 - Active buzzer (PA6 via NPN) and 5 V relay module (PA7).
- * Wiring: PA6 --> 1k --> NPN base ; NPN emitter --> GND ; buzzer(-) --> NPN collector ;
- *         buzzer(+) --> 5 V.   PA7 --> relay IN ; relay VCC 5 V, GND common.
+ * @brief   TEST 6 - Buzzer (PA6, driven directly) and 5 V relay module (PA7).
+ * Wiring: buzzer(+) --> PA6 ; buzzer(-) --> GND. No transistor: the BC547 went into the
+ *         IR receiver stage, so the buzzer runs straight off the pin at 3.3 V (~20 mA,
+ *         inside the 25 mA pin limit). See test_buzzer.c for the buzzer on its own.
+ *         PA7 --> relay IN ; relay VCC 5 V, GND common.
  *         Relay output: COM/NO switches the lamp's OWN supply (never route lamp current
  *         through the MB102 - see README). Start the test with NOTHING on the relay contacts;
  *         you should simply hear/see the relay click.

@@ -213,16 +213,41 @@ Remember **TX goes to RX and RX goes to TX** (crossed). The HC-05's RXD expects 
 
 ### Stage 7 - Buzzer (PA6) and relay (PA7) · `test_actuators.c`
 
-**Buzzer driver (NPN low-side switch)**
+**Buzzer - driven directly from PA6, no transistor**
 
 | Connection | Detail |
 |------------|--------|
-| PA6 → 1 kΩ → transistor **base** | limits base current |
-| transistor **emitter** → GND | |
-| buzzer **−** → transistor **collector** | |
-| buzzer **+** → 5 V | |
+| buzzer **+** (marked leg, or the longer one) | **PA6** |
+| buzzer **−** (other leg) | GND |
 
-**Check the transistor pinout before wiring**: BC547 (TO-92, flat side facing you, legs down) is typically **C-B-E from left to right**; many 2N2222 (plastic) are **E-B-C**. Use your datasheet, or the multimeter diode test to find the base.
+That is the whole circuit. Two wires.
+
+> **Why no transistor?** The original design used an NPN low-side switch so the buzzer
+> could run from 5 V and draw its current from the rail rather than the pin. The only
+> BC547 in the kit went into the IR receiver stage in Stage 2, and a working, aligned
+> circuit is not worth dismantling for a bit of volume. Driven straight off PA6 the
+> buzzer runs at **3.3 V** instead: quieter, but around **20 mA**, inside the **25 mA**
+> an STM32F401 pin is rated for.
+
+**First power-up:** put a **270 Ω** resistor in series with the + leg. It will sound thin,
+but nothing is at risk while you work out which buzzer is which. Once it beeps, remove the
+resistor and wire PA6 straight to **+** for full volume. The final build has no resistor.
+
+**Is your buzzer active or passive?** It matters, because the firmware only switches the
+pin on and off:
+
+| Buzzer | Behaviour | What to do |
+|--------|-----------|------------|
+| **Active** (own oscillator) | switching the pin on gives a **tone** | nothing - this is what the firmware expects |
+| **Passive** (no oscillator) | switching gives only a **click** | set `BUZZER_IS_PASSIVE` to `1` in `test_buzzer.c`, which generates the tone in software |
+
+Flash `test_buzzer.c` and listen to the first three beeps to find out which you have.
+Quick bench check without flashing anything: touch **+** to **3V3** and **−** to **GND** -
+a steady tone means active, a single click means passive.
+
+**The spare buzzer.** If you have two, the second can go on **PB0** as an extra sounder:
+wire it the same way and set `BUZ2_ENABLE` to `1` in `board.h`. Do **not** put both
+buzzers on PA6 - that doubles the current past what one pin can supply.
 
 **Relay module**
 
@@ -233,13 +258,17 @@ Remember **TX goes to RX and RX goes to TX** (crossed). The HC-05's RXD expects 
 | IN | **PA7** |
 | COM / NO / NC | **leave empty for the first test** |
 
+**Test the buzzer on its own first:** flash `test_buzzer.c` + `common/board.c`. Three
+beeps, then the deterrent cadence, repeating. The PA5 LED lights whenever the buzzer
+should be sounding, so you can confirm it works even somewhere noisy.
+
 **Test 1:** flash `test_actuators.c` with nothing connected to the relay contacts. **Expect:** 3 beeps, then 3 relay clicks, then a 6 s "breach" demo (relay on + varying beeps), repeat.
 
 **Relay polarity:** the code assumes an **active-low** board and drives PA7 as open-drain (which avoids half-on relays when a 3.3 V "high" meets a 5 V-powered input). If the relay is ON while the program says OFF, set `RELAY_ACTIVE_LOW` to `0` in `board.h`.
 
 **Test 2 - the strobe siren** now has its own stage, because it is the first test that puts a live 12 V load on the relay contacts. Finish Test 1 above (relay clicking with **nothing** attached) before going there. See **Stage 8**.
 
-**If it fails:** buzzer constantly on → transistor wrong way / base shorted; buzzer silent → buzzer polarity reversed or transistor pinout wrong; relay chatters or resets the MCU → supply sagging: check MB102 current, add decoupling capacitors, keep the strobe off the MB102 rails.
+**If it fails:** buzzer silent → polarity reversed (swap the two legs), or it is a passive buzzer (see the table above); buzzer very quiet → the 270 Ω test resistor is still fitted, take it out; relay chatters or resets the MCU → supply sagging: check MB102 current, add decoupling capacitors, keep the strobe off the MB102 rails.
 
 ### Stage 8 - 12 V strobe siren (PA7, via the relay) · `test_siren.c`
 
@@ -417,7 +446,7 @@ Linear regulators dissipate `(Vin − Vout) × I` as heat: with a 12 V adapter t
 - [ ] PA0, PA2 and PA4 each measured ≤ 3.3 V in every sensor state (PA0: about 0 V beam clear, about 3.3 V beam blocked). PB5 carries the PIR and tolerates up to 5 V
 - [ ] LCD level shifter: LV = 3.3 V, HV = 5 V, pull-ups verified on both sides
 - [ ] HC-05 TXD→PA10, RXD→PA9 (crossed), VCC = 5 V
-- [ ] Buzzer transistor orientation verified, 1 kΩ in series with the base
+- [ ] Buzzer + on PA6 and − on GND, 270 Ω test resistor removed, tone confirmed
 - [ ] Relay polarity confirmed, siren switched from the 12 V adapter (not the MB102 rails)
 - [ ] Siren current measured and recorded; `MB102 input + siren < 1 A` on the shared adapter
 - [ ] Siren on relay **NO** (not NC), red lead to **+**, relay contact rating checked
