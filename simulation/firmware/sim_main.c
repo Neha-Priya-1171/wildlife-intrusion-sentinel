@@ -72,7 +72,7 @@
  * With PIR_FITTED 0 the working detectors are the IR beam (PA0) and the vibration
  * sensor (PA2). Those two can still confirm each other, so the two-sensor rule below
  * still means something: break the beam AND tap the board within 2 s. If that is
- * awkward during a demo, press D over Bluetooth for single-sensor mode. */
+ * awkward during a demo, press D over Bluetooth for single-sensor mode (see below). */
 #define PIR_FITTED              0
 #define SIREN_FITTED            0
 
@@ -98,10 +98,10 @@ volatile uint16_t ldr_value    = 0;
 volatile uint8_t  is_night     = 0;
 volatile uint8_t  lcd_ok       = 0;   /* 0 = no LCD found; system runs without it    */
 volatile uint8_t  deter_on     = 0;   /* 1 while the buzzer and siren are running    */
-volatile uint8_t  demo_mode    = 0;   /* 1 = one sensor is enough (toggle with D)    */
 
 static uint32_t state_since = 0;      /* millis() when the current state began       */
 volatile uint8_t  breach_zone  = ZONE_A; /* which side fired: ZONE_A or ZONE_B       */
+volatile uint8_t  demo_mode    = 0;   /* 1 = one sensor is enough (toggle with D)    */
 
 /* set by the IR interrupt, cleared by the main loop */
 static volatile uint8_t  ir_flag    = 0;
@@ -359,14 +359,14 @@ static void send_status(void)
     uart_puts(",FALSE=");     uart_putu(false_alarms);
     uart_puts(",LDR=");       uart_putu(ldr_value);
     uart_puts((breach_zone == ZONE_A) ? ",ZONE=A" : ",ZONE=B");
+    uart_puts(demo_mode ? ",DEMO=1" : ",DEMO=0");
 #if !PIR_FITTED
     uart_puts(",PIR=OFF");
 #endif
 #if !SIREN_FITTED
     uart_puts(",SIREN=OFF");
 #endif
-    uart_puts(is_night ? ",NIGHT" : ",DAY");
-    uart_puts(demo_mode ? ",DEMO=1\r\n" : ",DEMO=0\r\n");
+    uart_puts(is_night ? ",NIGHT\r\n" : ",DAY\r\n");
 }
 
 /* Sent the moment a sensor fires, so the GUI animation starts in step with the event
@@ -534,6 +534,9 @@ int main(void)
                     enter_state(ST_SECURE, now);
                     break;
                 case 'D': case 'd':
+                    /* Demo mode: one sensor is enough, at any time of day. For a
+                     * presentation where breaking the beam AND tapping the board
+                     * within 2 s is awkward with one free hand. */
                     demo_mode = (uint8_t)!demo_mode;
                     uart_puts(demo_mode ? "Demo mode ON: one sensor triggers\r\n"
                                         : "Demo mode OFF: daylight needs two\r\n");

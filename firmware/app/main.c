@@ -43,7 +43,8 @@
  *     COOLDOWN Everything off for 3 s so one animal does not retrigger endlessly.
  *
  * BLUETOOTH COMMANDS (Android serial terminal, 9600 8N1)
- *     ?  help     S  status     R  reset to secure     T  2 s deterrent test
+ *     ?  help   S  status   R  reset to secure   T  2 s deterrent test
+ *     D  toggle demo mode: one sensor is enough to raise a breach, any time of day
  *
  * NOTE: the siren is optional. With nothing wired to the relay contacts you will simply
  * hear the relay click, and everything else still works.
@@ -77,7 +78,7 @@
  * With PIR_FITTED 0 the working detectors are the IR beam (PA0) and the vibration
  * sensor (PA2). Those two can still confirm each other, so the two-sensor rule below
  * still means something: break the beam AND tap the board within 2 s. If that is
- * awkward during a demo, press D over Bluetooth for single-sensor mode. */
+ * awkward during a demo, press D over Bluetooth for single-sensor mode (see below). */
 #define PIR_FITTED              0
 #define SIREN_FITTED            0
 
@@ -103,6 +104,7 @@ volatile uint16_t ldr_value    = 0;
 volatile uint8_t  is_night     = 0;
 volatile uint8_t  lcd_ok       = 0;   /* 0 = no LCD found; system runs without it    */
 volatile uint8_t  breach_zone  = ZONE_A; /* which side fired: ZONE_A or ZONE_B       */
+volatile uint8_t  demo_mode    = 0;   /* 1 = one sensor is enough (toggle with D)    */
 
 /* set by the IR interrupt, cleared by the main loop */
 static volatile uint8_t  ir_flag    = 0;
@@ -359,6 +361,7 @@ static void send_status(void)
     uart_puts(",FALSE=");     uart_putu(false_alarms);
     uart_puts(",LDR=");       uart_putu(ldr_value);
     uart_puts((breach_zone == ZONE_A) ? ",ZONE=A" : ",ZONE=B");
+    uart_puts(demo_mode ? ",DEMO=1" : ",DEMO=0");
 #if !PIR_FITTED
     uart_puts(",PIR=OFF");
 #endif
@@ -503,7 +506,7 @@ int main(void)
             char c = (char)USART1->DR;
             switch (c) {
                 case '?':
-                    uart_puts("Cmds: ?=help S=status R=reset T=test deterrent\r\n");
+                    uart_puts("Cmds: ?=help S=status R=reset T=test D=demo mode\r\n");
                     break;
                 case 'S': case 's':
                     send_status();
@@ -514,6 +517,15 @@ int main(void)
                     zone_leds_off();
                     state = ST_SECURE; state_since = now; trigger_mask = 0;
                     uart_puts("Reset to SECURE\r\n");
+                    break;
+                case 'D': case 'd':
+                    /* Demo mode: one sensor is enough, at any time of day. For a
+                     * presentation where breaking the beam AND tapping the board
+                     * within 2 s is awkward with one free hand. */
+                    demo_mode = (uint8_t)!demo_mode;
+                    uart_puts(demo_mode ? "Demo mode ON: one sensor triggers\r\n"
+                                        : "Demo mode OFF: daylight needs two\r\n");
+                    send_status();
                     break;
                 case 'T': case 't': {
                     uint32_t t0 = millis();
@@ -568,7 +580,7 @@ int main(void)
                               ((trigger_mask >> 2) & 1u));
             /* At night a single sensor is enough; in daylight we want two, because
              * sun glare and wind are what produce daytime false alarms. */
-            needed = (uint8_t)((REQUIRE_SECOND_SENSOR && !is_night) ? 2u : 1u);
+            needed = (uint8_t)((REQUIRE_SECOND_SENSOR && !is_night && !demo_mode) ? 2u : 1u);
 
             lcd_top = "CHECKING...";
 

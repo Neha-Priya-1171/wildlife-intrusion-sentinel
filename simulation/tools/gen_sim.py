@@ -63,7 +63,6 @@ REPS = [
     ("volatile uint8_t  lcd_ok       = 0;   /* 0 = no LCD found; system runs without it    */\n",
      "volatile uint8_t  lcd_ok       = 0;   /* 0 = no LCD found; system runs without it    */\n"
      "volatile uint8_t  deter_on     = 0;   /* 1 while the buzzer and siren are running    */\n"
-     "volatile uint8_t  demo_mode    = 0;   /* 1 = one sensor is enough (toggle with D)    */\n"
      "\nstatic uint32_t state_since = 0;      /* millis() when the current state began       */\n"),
 
     # ---- hoist the state-name table out of send_status ----
@@ -76,8 +75,7 @@ REPS = [
 
     # ---- heartbeat gains DEMO, plus the two new helpers ----
     ('    uart_puts(is_night ? ",NIGHT' + CRLF + '" : ",DAY' + CRLF + '");\n}\n',
-     '    uart_puts(is_night ? ",NIGHT" : ",DAY");\n'
-     '    uart_puts(demo_mode ? ",DEMO=1' + CRLF + '" : ",DEMO=0' + CRLF + '");\n}\n\n'
+     '    uart_puts(is_night ? ",NIGHT' + CRLF + '" : ",DAY' + CRLF + '");\n}\n\n'
      '/* Sent the moment a sensor fires, so the GUI animation starts in step with the event\n'
      ' * instead of waiting for the next heartbeat. */\n'
      'static void emit_event(const char *src)\n{\n'
@@ -111,16 +109,6 @@ REPS = [
      '                    uart_puts("Reset to SECURE' + CRLF + '");\n',
      '                    deter_on = 0;\n                    trigger_mask = 0;\n'
      '                    enter_state(ST_SECURE, now);\n'),
-    ('                    uart_puts("Cmds: ?=help S=status R=reset T=test deterrent' + CRLF + '");\n',
-     '                    uart_puts("Cmds: ?=help S=status R=reset T=test D=demo mode' + CRLF + '");\n'),
-    ("                case 'T': case 't': {\n",
-     "                case 'D': case 'd':\n"
-     "                    demo_mode = (uint8_t)!demo_mode;\n"
-     '                    uart_puts(demo_mode ? "Demo mode ON: one sensor triggers' + CRLF + '"\n'
-     '                                        : "Demo mode OFF: daylight needs two' + CRLF + '");\n'
-     "                    send_status();\n"
-     "                    break;\n"
-     "                case 'T': case 't': {\n"),
 
     # ---- state transitions all go through enter_state() ----
     ('            if ((now - state_since) >= PIR_WARMUP_MS) {\n'
@@ -130,8 +118,6 @@ REPS = [
      "                enter_state(ST_SECURE, now);\n            }\n"),
     ("                state = ST_VALIDATE; state_since = now;\n",
      "                enter_state(ST_VALIDATE, now);\n"),
-    ("            needed = (uint8_t)((REQUIRE_SECOND_SENSOR && !is_night) ? 2u : 1u);\n",
-     "            needed = (uint8_t)((REQUIRE_SECOND_SENSOR && !is_night && !demo_mode) ? 2u : 1u);\n"),
     ('            if (votes >= needed) {\n                state = ST_BREACH; state_since = now;\n'
      '                breach_count++;\n                relay_set(1);\n'
      '                uart_puts("ZONE 1: ANIMAL BREACH' + CRLF + '");\n                send_status();\n',
