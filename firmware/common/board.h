@@ -44,10 +44,10 @@
 
 /* Optional SECOND buzzer on PB0, for the spare one in the kit. Two buzzers must never
  * share one pin - that doubles the current past the pin's limit - so the spare gets its
- * own. Set BUZ2_ENABLE to 1 only once PB0 is actually wired. */
+ * own. Set BUZ2_ENABLE back to 0 if you unwire PB0. */
 #define BUZ2_PORT    GPIOB
 #define BUZ2_PIN     0
-#define BUZ2_ENABLE  0
+#define BUZ2_ENABLE  1
 #define RELAY_PORT   GPIOA
 #define RELAY_PIN    7
 
@@ -79,6 +79,12 @@ void     gpio_af(GPIO_TypeDef *p, uint8_t pin, uint32_t af);
 void     gpio_open_drain(GPIO_TypeDef *p, uint8_t pin, uint8_t enable);
 void     gpio_write(GPIO_TypeDef *p, uint8_t pin, uint8_t level);
 uint8_t  gpio_read(GPIO_TypeDef *p, uint8_t pin);
+
+/* Buzzer helpers. One implementation in board.c, used by every test and by the
+ * application, so wiring a second buzzer is a board.h change and nothing else.
+ * buzzer_set() drives BOTH buzzers together when BUZ2_ENABLE is 1. */
+void     buzzer_init(void);
+void     buzzer_set(uint8_t on);
 
 /* Status LED helpers (PA5) */
 void     led_init(void);

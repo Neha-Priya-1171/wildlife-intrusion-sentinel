@@ -16,11 +16,12 @@
  *        (same Keil options and include path as main.c)
  *
  * PIN MAP (from board.h - do not change it here)
- *     PA0  IR receiver      EXTI0 interrupt      PA6  Buzzer (direct, no NPN)
+ *     PA0  IR receiver      EXTI0 interrupt      PA6  Buzzer 1 (direct, no NPN)
  *     PB5  PIR OUT          polled input         PA7  Relay -> 12 V siren
  *     PA2  SW-420 DO        polled input         PA9  HC-05 RXD (USART1 TX)
  *     PA4  LDR AO           ADC1_IN4             PA10 HC-05 TXD (USART1 RX)
  *     PA5  Green LED        SECURE indicator     PB6/PB7 LCD SCL/SDA (I2C1)
+ *     PB0  Buzzer 2 (direct, optional - BUZ2_ENABLE in board.h)
  *
  * STATE MACHINE
  *     WARMUP -> SECURE -> VALIDATE -> BREACH -> COOLDOWN -> SECURE
@@ -155,9 +156,9 @@ static uint16_t adc1_read(void)
     return (uint16_t)ADC1->DR;
 }
 
-/* ====================== Buzzer (PA6) and relay (PA7) ====================== */
-static void buzzer_init(void) { gpio_write(BUZ_PORT, BUZ_PIN, 0); gpio_mode(BUZ_PORT, BUZ_PIN, BRD_MODE_OUT); }
-static void buzzer(uint8_t on) { gpio_write(BUZ_PORT, BUZ_PIN, on); }
+/* ============ Buzzers (PA6, and PB0 when BUZ2_ENABLE) and relay (PA7) ============
+ * buzzer_init() and buzzer_set() live in board.c so that wiring a second buzzer is a
+ * board.h change and nothing here needs touching. They drive both buzzers together. */
 
 /* Active-low opto relay boards are driven open-drain: the MCU only ever pulls the input
  * to GND, never tries to present 3.3 V to a 5 V-referenced input. Same scheme as
@@ -189,7 +190,7 @@ static void buzzer_pattern(uint32_t now, uint8_t active)
     static uint8_t  on      = 0;
 
     if (!active) {
-        if (on) { on = 0; buzzer(0); }
+        if (on) { on = 0; buzzer_set(0); }
         next_ms = now;
         step = 0;
         return;
@@ -197,7 +198,7 @@ static void buzzer_pattern(uint32_t now, uint8_t active)
     if ((int32_t)(now - next_ms) < 0) return;
 
     on = (uint8_t)!on;
-    buzzer(on);
+    buzzer_set(on);
     if (on) next_ms = now + 60u + 40u * (step % 4u);
     else  { next_ms = now + 200u - 40u * (step % 4u); step++; }
 }

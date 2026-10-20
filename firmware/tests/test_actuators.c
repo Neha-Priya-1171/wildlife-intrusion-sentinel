@@ -1,9 +1,12 @@
 /**
  * @file    test_actuators.c
- * @brief   TEST 6 - Buzzer (PA6, driven directly) and 5 V relay module (PA7).
- * Wiring: buzzer(+) --> PA6 ; buzzer(-) --> GND. No transistor: the BC547 went into the
- *         IR receiver stage, so the buzzer runs straight off the pin at 3.3 V (~20 mA,
- *         inside the 25 mA pin limit). See test_buzzer.c for the buzzer on its own.
+ * @brief   TEST 6 - Buzzers (PA6 + PB0, direct) and the 5 V relay module (PA7).
+ * NOTE: the relay has nothing to do with the buzzers. It is only there to switch the
+ *       12 V siren, which is not being used, so this test is OPTIONAL. For the buzzers
+ *       alone use test_buzzer.c, which needs no relay at all.
+ * Wiring: buzzer1(+) --> PA6 ; buzzer2(+) --> PB0 ; both (-) --> GND. No transistor -
+ *         the BC547 went into the IR receiver stage, so each buzzer runs straight off
+ *         its pin at 3.3 V (~20 mA each, inside the 25 mA per-pin limit).
  *         PA7 --> relay IN ; relay VCC 5 V, GND common.
  *         Relay output: COM/NO switches the lamp's OWN supply (never route lamp current
  *         through the MB102 - see README). Start the test with NOTHING on the relay contacts;
@@ -14,14 +17,11 @@
  */
 #include "board.h"
 
-/* ----- Buzzer ----- */
-static void buzzer_init(void) { gpio_write(BUZ_PORT, BUZ_PIN, 0); gpio_mode(BUZ_PORT, BUZ_PIN, BRD_MODE_OUT); }
-static void buzzer(uint8_t on) { gpio_write(BUZ_PORT, BUZ_PIN, on); }
-
+/* ----- Buzzers ----- buzzer_init()/buzzer_set() come from board.c and drive both. */
 static void beep(uint32_t on_ms, uint32_t off_ms)
 {
-    buzzer(1); delay_ms(on_ms);
-    buzzer(0); delay_ms(off_ms);
+    buzzer_set(1); delay_ms(on_ms);
+    buzzer_set(0); delay_ms(off_ms);
 }
 
 /* ----- Relay -----
@@ -79,7 +79,7 @@ int main(void)
             step++;
         }
         relay_set(0);
-        buzzer(0);
+        buzzer_set(0);
         delay_ms(3000);
     }
 }

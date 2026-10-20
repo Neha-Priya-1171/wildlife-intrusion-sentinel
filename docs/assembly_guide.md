@@ -27,7 +27,7 @@ A beginner-friendly, **build-one-block-then-test-it** guide. Flash the matching 
 3. **Voltage check (adapter on, nothing else connected):** switch on and measure each rail against GND: **3.3 V ± 0.1** and **5.0 V ± 0.25**. Fix before proceeding. Power off.
 4. **Join the grounds:** run a black jumper between the GND (−) rail of the 3.3 V side and the GND (−) rail of the 5 V side so you have one ground grid. (Many breadboards split rails in the middle; bridge those gaps with jumpers.)
 5. **Place the Black Pill** across the centre gap of the breadboard, leaving rows free on both sides. Connect: **3V3 pin → 3.3 V rail**, **GND pin → ground grid**. Leave the 5V pin unconnected.
-6. **Decoupling (recommended):** a 100 nF capacitor between 3.3 V and GND right next to the Black Pill, and one 100 nF + 10 µF across the 5 V rail near the relay/buzzer.
+6. **Decoupling (recommended):** a 100 nF capacitor between 3.3 V and GND right next to the Black Pill, and one 100 nF + 10 µF across the 5 V rail near the relay. (The buzzers sit on GPIO pins, not the 5 V rail.)
 
 **Black Pill checkpoint:** Power on. The board's power LED should light. If anything gets warm, power off at once and recheck.
 
@@ -211,43 +211,67 @@ Remember **TX goes to RX and RX goes to TX** (crossed). The HC-05's RXD expects 
 
 **If it fails:** TX/RX not crossed; HC-05 on 3.3 V (needs 5 V); module configured for another baud rate (default data mode is 9600); phone is an iPhone (classic Bluetooth SPP is not supported - use Android or a PC terminal).
 
-### Stage 7 - Buzzer (PA6) and relay (PA7) · `test_actuators.c`
+### Stage 7 - Buzzers (PA6 and PB0) · `test_buzzer.c`
 
-**Buzzer - driven directly from PA6, no transistor**
+Two 12 mm buzzers, each driven straight from its own GPIO pin. **No transistor, no relay,
+no 5 V rail.** This is the project's deterrent now that the siren is deferred.
 
-| Connection | Detail |
-|------------|--------|
-| buzzer **+** (marked leg, or the longer one) | **PA6** |
-| buzzer **−** (other leg) | GND |
+| Buzzer | + leg (marked, or the longer one) | − leg |
+|--------|-----------------------------------|-------|
+| Buzzer 1 | **PA6** | GND |
+| Buzzer 2 | **PB0** | GND |
 
-That is the whole circuit. Two wires.
+Four wires in total. Both − legs go to the same ground as the Black Pill.
 
-> **Why no transistor?** The original design used an NPN low-side switch so the buzzer
-> could run from 5 V and draw its current from the rail rather than the pin. The only
-> BC547 in the kit went into the IR receiver stage in Stage 2, and a working, aligned
-> circuit is not worth dismantling for a bit of volume. Driven straight off PA6 the
-> buzzer runs at **3.3 V** instead: quieter, but around **20 mA**, inside the **25 mA**
-> an STM32F401 pin is rated for.
+> **One buzzer per pin, always.** A 12 mm buzzer pulls about **20 mA** at 3.3 V and an
+> STM32F401 pin is rated for **25 mA**. Two on PA6 would be roughly 40 mA and over the
+> limit. Using only one buzzer is fine - set `BUZ2_ENABLE` to `0` in `board.h` and leave
+> PB0 alone.
 
-**First power-up:** put a **270 Ω** resistor in series with the + leg. It will sound thin,
-but nothing is at risk while you work out which buzzer is which. Once it beeps, remove the
-resistor and wire PA6 straight to **+** for full volume. The final build has no resistor.
+> **Why no transistor?** The original design switched the buzzer from 5 V through an NPN.
+> The only BC547 in the kit went into the IR receiver stage in Stage 2, and a built and
+> aligned circuit is not worth dismantling for some volume. Direct from the pin the
+> buzzers run at 3.3 V: quieter, but well inside the pin's rating.
 
-**Is your buzzer active or passive?** It matters, because the firmware only switches the
-pin on and off:
+**First power-up:** a **270 Ω** resistor in series with a + leg makes the test safe while
+you are still unsure of the part. It will sound thin. Once it beeps, take it out and wire
+the pin straight to **+** for full volume. The final build has no resistor.
 
-| Buzzer | Behaviour | What to do |
-|--------|-----------|------------|
-| **Active** (own oscillator) | switching the pin on gives a **tone** | nothing - this is what the firmware expects |
-| **Passive** (no oscillator) | switching gives only a **click** | set `BUZZER_IS_PASSIVE` to `1` in `test_buzzer.c`, which generates the tone in software |
+**Active or passive?** The firmware only switches pins on and off, so you want **active**
+buzzers (own oscillator → a tone). A **passive** one only clicks. If yours clicks, set
+`BUZZER_IS_PASSIVE` to `1` in `test_buzzer.c` and it will generate the tone in software.
+Bench check without flashing: touch **+** to **3V3** and **−** to **GND** - a steady tone
+means active, a single click means passive.
 
-Flash `test_buzzer.c` and listen to the first three beeps to find out which you have.
-Quick bench check without flashing anything: touch **+** to **3V3** and **−** to **GND** -
-a steady tone means active, a single click means passive.
+**Test:** build `test_buzzer.c` + `common/board.c`. From reset:
 
-**The spare buzzer.** If you have two, the second can go on **PB0** as an extra sounder:
-wire it the same way and set `BUZ2_ENABLE` to `1` in `board.h`. Do **not** put both
-buzzers on PA6 - that doubles the current past what one pin can supply.
+| Part | What you hear | Tells you |
+|------|---------------|-----------|
+| 1 | buzzer 1 alone, three 300 ms beeps | PA6 and buzzer 1 are good |
+| 2 | buzzer 2 alone, three 300 ms beeps | PB0 and buzzer 2 are good |
+| 3 | both together, two 500 ms blasts | the full deterrent |
+| 4 | six seconds of shifting cadence | what the alarm actually sounds like |
+
+Then three seconds of silence and it repeats. The **PA5 LED is on whenever something
+should be sounding**, so the test can be read by eye in a noisy room.
+
+**If it fails:** part 1 silent → buzzer 1 polarity reversed (swap the legs), or it is the
+passive one. Part 1 sounds but part 2 does not → PB0 wiring, not the code. Everything very
+quiet → the 270 Ω test resistor is still fitted. Nothing at all, LED also dead → wrong
+target built, or the board is not running.
+
+Nothing in the Watch window is needed for this test.
+
+### Stage 8 - Relay (PA7) and the 12 V siren · `test_actuators.c`, `test_siren.c`
+
+> **OPTIONAL - currently deferred.** The buzzers in Stage 7 are the working deterrent.
+> This stage exists only if you add the 12 V siren, which needs a barrel-jack-to-screw-
+> terminal adapter to get wires off the DC supply. Skipping it costs you nothing: the
+> firmware drives the relay either way, so with nothing on the contacts you simply hear
+> it click at the moment of a breach.
+>
+> **The relay has nothing to do with the buzzers.** It only switches the siren's own 12 V.
+> If you are not fitting a siren, you can skip this whole stage.
 
 **Relay module**
 
@@ -256,24 +280,16 @@ buzzers on PA6 - that doubles the current past what one pin can supply.
 | VCC | 5 V |
 | GND | GND |
 | IN | **PA7** |
-| COM / NO / NC | **leave empty for the first test** |
+| COM / NO / NC | leave empty unless the siren is fitted |
 
-**Test the buzzer on its own first:** flash `test_buzzer.c` + `common/board.c`. Three
-beeps, then the deterrent cadence, repeating. The PA5 LED lights whenever the buzzer
-should be sounding, so you can confirm it works even somewhere noisy.
+`test_actuators.c` exercises the buzzers and the relay together; with nothing on the
+contacts you should just hear the relay click three times.
 
-**Test 1:** flash `test_actuators.c` with nothing connected to the relay contacts. **Expect:** 3 beeps, then 3 relay clicks, then a 6 s "breach" demo (relay on + varying beeps), repeat.
+**Relay polarity:** the code assumes an **active-low** board and drives PA7 open-drain,
+which avoids a half-energised relay when a 3.3 V high meets a 5 V-referenced input. If the
+relay is ON while the program says OFF, set `RELAY_ACTIVE_LOW` to `0` in `board.h`.
 
-**Relay polarity:** the code assumes an **active-low** board and drives PA7 as open-drain (which avoids half-on relays when a 3.3 V "high" meets a 5 V-powered input). If the relay is ON while the program says OFF, set `RELAY_ACTIVE_LOW` to `0` in `board.h`.
-
-**Test 2 - the strobe siren** now has its own stage, because it is the first test that puts a live 12 V load on the relay contacts. Finish Test 1 above (relay clicking with **nothing** attached) before going there. See **Stage 8**.
-
-**If it fails:** buzzer silent → polarity reversed (swap the two legs), or it is a passive buzzer (see the table above); buzzer very quiet → the 270 Ω test resistor is still fitted, take it out; relay chatters or resets the MCU → supply sagging: check MB102 current, add decoupling capacitors, keep the strobe off the MB102 rails.
-
-### Stage 8 - 12 V strobe siren (PA7, via the relay) · `test_siren.c`
-
-> ⚠ **Status: NOT YET TESTED.** The siren has been received and the test program is written,
-> but it has never been run. Nothing below is a verified result.
+> ⚠ **The siren has never been powered or tested.** Nothing below is a verified result.
 
 **The part:** Mini Strobe Wired Siren, marked **A-12-B**, red, two flying leads.
 The packaging states **12 V**. It does **not** state a current rating, so the current is
@@ -428,7 +444,7 @@ Neither stops the rest of the system.
 | Relay coil | 70-90 mA |
 | HC-05 | 30-40 mA |
 | LCD + backlight | 20-30 mA |
-| Buzzer | ~30 mA |
+| Buzzers (2, on GPIO pins - **not** a rail load) | ~20 mA each, from PA6 and PB0 |
 | IR LED (220 Ω) + receiver stage | ~20 mA |
 | PIR / SW-420 / LDR / STM32 | < 50 mA total |
 | **Siren A-12-B (12 V side, not an MB102 load)** | **unknown - measure it (expect roughly 100-300 mA)** |
@@ -458,7 +474,7 @@ Linear regulators dissipate `(Vin − Vout) × I` as heat: with a 12 V adapter t
 | Symptom | Most likely cause |
 |---------|-------------------|
 | Nothing works, board dead | No power, rails miswired, grounds missing |
-| Random resets when relay/buzzer fires | Supply sag / noise → decoupling caps, strobe off the MB102 rails |
+| Random resets when the relay or buzzers fire | Supply sag / noise → decoupling caps, strobe off the MB102 rails |
 | One sensor always "triggered" | Wrong polarity macro, floating input, trimmer pot mis-set |
 | LCD blank | Contrast pot, wrong I2C wiring, level-shifter supplies swapped |
 | Bluetooth connects but no text | TX/RX not crossed, wrong baud, wrong app mode |

@@ -53,6 +53,27 @@ void gpio_write(GPIO_TypeDef *p, uint8_t pin, uint8_t level)
 
 uint8_t gpio_read(GPIO_TypeDef *p, uint8_t pin) { return (uint8_t)((p->IDR >> pin) & 1u); }
 
+/* Buzzers are driven straight from their GPIO pins - no transistor. Each buzzer gets
+ * its own pin: two on one pin would draw about 40 mA, past what an STM32F401 I/O can
+ * supply. Both are set low before the pins become outputs so neither chirps at reset. */
+void buzzer_init(void)
+{
+    gpio_write(BUZ_PORT, BUZ_PIN, 0);
+    gpio_mode(BUZ_PORT, BUZ_PIN, BRD_MODE_OUT);
+#if BUZ2_ENABLE
+    gpio_write(BUZ2_PORT, BUZ2_PIN, 0);
+    gpio_mode(BUZ2_PORT, BUZ2_PIN, BRD_MODE_OUT);
+#endif
+}
+
+void buzzer_set(uint8_t on)
+{
+    gpio_write(BUZ_PORT, BUZ_PIN, on);
+#if BUZ2_ENABLE
+    gpio_write(BUZ2_PORT, BUZ2_PIN, on);
+#endif
+}
+
 void led_init(void)
 {
     gpio_write(LED_PORT, LED_PIN, 0);

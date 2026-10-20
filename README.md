@@ -14,7 +14,7 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
 
 * detects a boundary breach in hardware with an **external interrupt** (EXTI) - the CPU does not have to poll;
 * cross-checks the breach with a **second and third sensor** to cut false triggers;
-* scares the animal with a **flashing strobe and a varying-cadence buzzer** (varying patterns reduce habituation);
+* scares the animal with a **varying-cadence twin buzzer** (and a strobe siren, if fitted) - varying patterns reduce habituation;
 * **alerts the farmer** over Bluetooth and shows state on a local LCD.
 
 ## 2. Technical architecture
@@ -30,8 +30,8 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
 ├───────────────────┤   PA4 (ADC) │  GPIO            │         └─────────────────────┘
 │ LDR light module  ├────────────►│   (Cortex-M4)    │ PA5     ┌─────────────────────┐
 └───────────────────┘             │                  ├────────►│ Green "SECURE" LED  │
-                                  │                  │ PA6     ├─────────────────────┤
-                                  │                  ├────────►│ Buzzer (NPN driver) │
+                                  │                  │ PA6/PB0 ├─────────────────────┤
+                                  │                  ├────────►│ Buzzer x2 (direct)  │
                                   │                  │ PA7     ├─────────────────────┤
                                   │                  ├────────►│ Relay → flashing lamp│
                                   └──────────────────┘         └─────────────────────┘
@@ -42,7 +42,7 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
 1. **IDLE / SECURE** - green LED on, LCD shows `STATUS: SECURE`, CPU waits for an interrupt.
 2. **TRIGGER** - IR beam break (or vibration/PIR edge) raises an EXTI interrupt.
 3. **VALIDATE** - firmware checks the other sensors inside a short time window; the **LDR** reading is used to adjust for day/night/glare behaviour.
-4. **DETER** - relay switches the strobe, buzzer plays a varying pattern.
+4. **DETER** - both buzzers play a varying pattern; the relay also switches the strobe siren if one is fitted.
 5. **ALERT** - `ZONE 1: ANIMAL BREACH` is sent over USART1 → HC-05 → phone; LCD shows `STATUS: BREACH` until reset.
 
 This repository currently contains the **hardware bring-up test firmware** (one small program per subsystem). Integrated firmware comes after every block passes its test.
@@ -64,9 +64,9 @@ This repository currently contains the **hardware bring-up test firmware** (one 
 | 11 | 16×2 character LCD with PCF8574 I2C backpack | 1 | Address usually 0x27 or 0x3F |
 | 12 | 4-channel bidirectional 3.3 V ↔ 5 V logic level converter | 1 | Used on the I2C lines |
 | 13 | HC-05 Bluetooth module | 1 | 9600 baud in data mode |
-| 14 | 12 mm buzzer (3-5 V) | 2 | Driven directly from PA6 at 3.3 V. Active (built-in oscillator) is what the firmware expects; `test_buzzer.c` tells you which type you have. Spare can go on PB0 |
+| 14 | 12 mm buzzer (3-5 V) | 2 | **Both in use.** Driven directly at 3.3 V: buzzer 1 on PA6, buzzer 2 on PB0. One per pin. Active (built-in oscillator) is what the firmware expects |
 | 15 | NPN transistor BC547 (or 2N2222) | 1 | **Used by the IR receiver stage**, not the buzzer. The buzzer is driven straight from PA6 |
-| 16 | 5 V single-channel opto-isolated relay module | 1 | Check active-high/low |
+| 16 | 5 V single-channel opto-isolated relay module | 1 | Check active-high/low. Switches the **siren** only; the buzzers do not use it. Optional while the siren is deferred |
 | 17 | Mini strobe wired siren (model **A-12-B**, red) | 1 | Replaces the unavailable 5 V flashing lamp. **12 V DC confirmed** from the packaging; current rating is **not** printed and must be measured. Two flying leads, switched from the 12 V adapter via the relay. **Received - testing pending** |
 | 18 | 830-point breadboard | 1 | |
 | 19 | DuPont jumper wires (M-M, M-F, F-F) | 1 set | |
@@ -76,10 +76,10 @@ This repository currently contains the **hardware bring-up test firmware** (one 
 
 | Part | Qty | Purpose |
 |------|-----|---------|
-| 1 kΩ resistor | 1 | No longer needed - the buzzer is driven directly. Keep as spare |
+| 1 kΩ resistor | 1 | Not needed - the buzzers are driven directly. Keep as spare |
 | 220 Ω resistor (second) | 1 | IR transmitter LED current limit (only one 220 Ω is on hand, for the green LED) |
 | 270 Ω resistor | 1 | Temporary series resistor for the first buzzer power-up only; removed afterwards |
-| NPN transistor BC547 / 2N2222 (extra) | 2 | IR receiver stage (the first one is used for the buzzer) |
+| NPN transistor BC547 / 2N2222 (extra) | 1 | Spare for the IR receiver stage. The buzzers need none |
 | 10 kΩ resistor | 1 | IR receiver collector pull-up |
 | 10 kΩ + 20 kΩ resistors | 2 each | Spare voltage divider if any sensor output measures above 3.3 V |
 | 100 nF ceramic capacitors | 3-5 | Decoupling near MCU and modules |
@@ -95,12 +95,13 @@ Estimated cost of the main list: **≈ ₹2,381**.
  12 V adapter ─► [MB102] ─┬─ 3.3 V rail ─► STM32 3V3 pin, level-shifter LV side,
                           │                SW-420 module, LDR module
                           ├─ 5 V rail ──► HC-05, LCD backpack, level-shifter HV side,
-                          │                relay VCC, buzzer, PIR, IR sensor
+                          │                relay VCC, PIR, IR sensor
                           └─ GND rails ─► ONE common ground grid (both rails' − joined)
 ```
 
 * **3.3 V digital core:** the Black Pill and anything whose output goes to an STM32 pin that is not 5 V-safe.
-* **5 V peripherals:** modules that need 5 V (HC-05, LCD, relay, buzzer, PIR).
+* **5 V peripherals:** modules that need 5 V (HC-05, LCD, relay, PIR).
+* **The buzzers are not a rail load at all.** Each is driven straight from its GPIO pin at 3.3 V (PA6 and PB0), so they draw from the MCU, not from the MB102.
 * **Common ground:** join the − rails of both sides and connect every module GND and the ST-LINK GND to it. Missing grounds cause most "it doesn't work" problems.
 * **SW-420 and LDR modules run from 3.3 V on purpose**: their outputs then can never exceed 3.3 V (important for the ADC pin PA4).
 * **Never power the Black Pill from two sources.** Use *either* the MB102 3.3 V rail *or* USB-C. When flashing with ST-LINK, connect only GND, SWDIO and SWCLK (leave the ST-LINK 3.3 V wire off if the MB102 powers the board).
@@ -112,13 +113,13 @@ Estimated cost of the main list: **≈ ₹2,381**.
 | STM32 pin | Connected to | Function | Notes |
 |-----------|--------------|----------|-------|
 | **PA0** | IR receiver stage (NPN collector) | EXTI0 / digital in | Beam clear = LOW, beam broken = HIGH (rising edge). Polarity set by `IR_ACTIVE_LOW` in `board.h`. Black Pill KEY button is also on PA0 |
-| **PB0** | Spare buzzer 2 **+** (optional) | GPIO out | Only if `BUZ2_ENABLE` is set in `board.h`. Never share PA6 between two buzzers |
+| **PB0** | Buzzer 2 **+** (direct) | GPIO out | Enabled (`BUZ2_ENABLE` = 1 in `board.h`). One buzzer per pin - never share PA6 between two |
 | **PB5** | PIR OUT | Digital in (polled) | **Moved here from PA1.** PB5 has no ADC function, so it is an FT (5 V tolerant) pin and accepts the module's ~4.3 V output. PA1 is 3.3 V-only and is now treated as suspect |
 | **PA2** | SW-420 DO | Digital in (EXTI2 capable) | Module powered from 3.3 V |
 | **PA4** | LDR module AO | ADC1_IN4 | Must never exceed 3.3 V |
 | **PA5** | Green LED (+) via 220 Ω | GPIO out | "SECURE" indicator |
-| **PA6** | Buzzer **+** (direct, no transistor) | GPIO out | High = buzzer on. ~20 mA at 3.3 V, inside the 25 mA pin limit. The BC547 went to the IR receiver stage |
-| **PA7** | Relay module IN | GPIO out | Check module polarity (`RELAY_ACTIVE_LOW`) |
+| **PA6** | Buzzer 1 **+** (direct, no transistor) | GPIO out | High = buzzer on. ~20 mA at 3.3 V, inside the 25 mA pin limit. The BC547 went to the IR receiver stage |
+| **PA7** | Relay module IN | GPIO out | Check module polarity (`RELAY_ACTIVE_LOW`). **For the siren only - nothing to do with the buzzers.** Optional while the siren is deferred |
 | **PA9** | HC-05 RXD | USART1_TX (AF7) | 9600 8N1 |
 | **PA10** | HC-05 TXD | USART1_RX (AF7) | |
 | **PB6** | LCD SCL via level shifter | I2C1_SCL (AF4) | LV = 3.3 V, HV = 5 V |
@@ -153,13 +154,13 @@ Estimated cost of the main list: **≈ ₹2,381**.
         ├── test_ldr.c         # (bonus) PA4 ADC
         ├── test_lcd.c         # I2C1 16x2 LCD
         ├── test_bluetooth.c   # USART1 + HC-05
-        └── test_actuators.c   # buzzer PA6 + relay PA7
+        └── test_actuators.c   # buzzers + relay together (relay = siren only, optional)
 ```
 
 ## 7. Quick start
 
 1. Install the toolchain: [`docs/keil_setup.md`](docs/keil_setup.md).
-2. Assemble and test one block at a time: [`docs/assembly_guide.md`](docs/assembly_guide.md). Order: **LED → IR → PIR/vibration → LDR → LCD → Bluetooth → buzzer → relay**.
+2. Assemble and test one block at a time: [`docs/assembly_guide.md`](docs/assembly_guide.md). Order: **LED → IR → PIR/vibration → LDR → LCD → Bluetooth → buzzers**. The relay and siren (Stages 8-9) are optional and currently deferred.
 3. Each test is its own program. Build **one test file + `common/board.c`** per Keil target.
 4. When every test passes, integrate (state machine in section 2).
 
@@ -196,10 +197,11 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 | 4 | LDR light sensor | PA4 | `test_ldr.c` | Not recorded |
 | 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | Not recorded |
 | 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | Not recorded |
-| 7 | Buzzer (direct) + relay (dry) | PA6/PA7 | `test_buzzer.c`, `test_actuators.c` | Not recorded |
-| 8 | **12 V strobe siren via relay** | PA7 | `test_siren.c` | **Not started** - hardware received, code written, never run |
-| 9 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |
-| 10 | Live GUI simulation | - | `simulation/swis_gui.py` + `simulation/firmware/sim_main.c` | **Desktop side tested; never run against the board** |
+| 7 | Buzzers x2 (direct) | PA6/PB0 | `test_buzzer.c` | **Buzzer 1 tested and working**; buzzer 2 on PB0 not yet wired |
+| 8 | Relay (optional, for the siren) | PA7 | `test_actuators.c` | Not recorded - skippable while the siren is deferred |
+| 9 | 12 V strobe siren | PA7 | `test_siren.c` | **Deferred** - hardware received, code written, never run |
+| 10 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |
+| 11 | Live GUI simulation | - | `simulation/swis_gui.py` + `simulation/firmware/sim_main.c` | **Desktop side tested; never run against the board** |
 
 "Not recorded" means no result has been logged here, not that the stage failed. Update the row when you run the stage.
 

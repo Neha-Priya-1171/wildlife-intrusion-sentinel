@@ -29,11 +29,12 @@ NEW_HEADER = '''/**
  *        (same Keil options and include path as main.c)
  *
  * PIN MAP (from board.h - do not change it here)
- *     PA0  IR receiver      EXTI0 interrupt      PA6  Buzzer (direct, no NPN)
+ *     PA0  IR receiver      EXTI0 interrupt      PA6  Buzzer 1 (direct, no NPN)
  *     PB5  PIR OUT          polled input         PA7  Relay -> 12 V siren
  *     PA2  SW-420 DO        polled input         PA9  HC-05 RXD (USART1 TX)
  *     PA4  LDR AO           ADC1_IN4             PA10 HC-05 TXD (USART1 RX)
  *     PA5  Green LED        SECURE indicator     PB6/PB7 LCD SCL/SDA (I2C1)
+ *     PB0  Buzzer 2 (direct, optional - BUZ2_ENABLE in board.h)
  *
  * STATE MACHINE
  *     WARMUP -> SECURE -> VALIDATE -> BREACH -> COOLDOWN -> SECURE

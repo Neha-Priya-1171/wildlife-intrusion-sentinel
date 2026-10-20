@@ -14,7 +14,7 @@ left exactly as it is.
         v
    STM32 (sim_main.c) --USART1--> HC-05 --Bluetooth--> Windows COM port --> swis_gui.py
         |                                                                        |
-        +--> buzzer PA6 + siren via relay PA7                    forest/farm animation,
+        +--> buzzers PA6 + PB0 (+ siren via PA7 if fitted)       forest/farm animation,
              (the real noise, on the bench)                      siren, phone alert card
 ```
 
