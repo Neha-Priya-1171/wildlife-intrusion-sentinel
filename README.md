@@ -199,8 +199,8 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 | 4 | LDR light sensor | PA4 | `test_ldr.c` | Not recorded |
 | 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | Not recorded |
 | 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | Not recorded |
-| 7 | Buzzers x2 (direct) | PA6/PB0 | `test_buzzer.c` | **Buzzer 1 (PA6) works.** Buzzer 2 on PB0 silent - proven not to be the buzzer (swapped both), cause unresolved |
-| 7b | Zone indicator LEDs | PA5 (shared) / PA8 | `test_zones.c` | **Not yet wired** - only PA8 needs a new LED; code written, never run |
+| 7 | Buzzers x2 (direct) | PA6/PB0 | `test_buzzer.c` | **Buzzer 1 (PA6) tested and working.** Buzzer 2 on PB0 silent - proven not to be the buzzer (swapped both), cause unresolved. Not blocking: see zone design below |
+| 7b | Zone indicator LEDs | PA5 (shared) / PA8 | `test_zones.c` | **Complete - tested and passing.** All five parts verified on hardware: each LED alone, both together, and a solid-LED breach on each side |
 | 8 | Relay (optional, for the siren) | PA7 | `test_actuators.c` | Not recorded - skippable while the siren is deferred |
 | 9 | 12 V strobe siren | PA7 | `test_siren.c` | **Deferred** - hardware received, code written, never run |
 | 10 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |
@@ -210,6 +210,7 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 
 ### 9.3 Open items
 
+* **Zone indication verified on hardware.** `test_zones.c` passes all five parts: PA5 alone, PA8 alone, both together, then a breach on each side with the correct LED going solid. Note that in *both* breach parts the sound comes from PA6, since PB0's buzzer is dead - which is the fallback design working as intended, not a fault.
 * **Buzzer 2 on PB0 is silent.** Buzzer 1 on PA6 works. Swapping the two buzzers over did not move the fault, so the parts are fine and the problem is PB0, its wire or its breadboard row. **Unresolved, and deliberately no longer blocking:** the design now puts zone indication on two LEDs (PA3/PA8, both on the proven port A) rather than on the buzzers, so the system still reports which side was breached with only one working buzzer. Worth noting that PB0 being dead may also be a warning about PB5 (PIR) and PB6/PB7 (LCD), which are on the same port and not yet tested.
 * **PIR moved to PB5** - PA1 read permanently HIGH and never changed. The firmware logic was audited and is correct, so the fault is electrical. Rather than keep debugging PA1, the PIR now lives on **PB5**, which unlike PA1 has no ADC function and therefore tolerates 5 V - so the module's measured ~4.3 V output is within spec there. Rerun `test_pir.c` on the new pin. PA1 remains unproven and should not be reused until tested.
 * **Siren** - received and confirmed 12 V from the packaging, but the **current rating is not printed on the unit or the box**. Measure it before any extended run and check it against the 1 A adapter budget in section 4.
