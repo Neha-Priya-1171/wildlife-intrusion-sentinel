@@ -23,7 +23,7 @@ Crop raiding by large animals (elephants, wild boar, deer) causes heavy losses f
  INPUTS (sensing)                  STM32F401CCU6                     OUTPUTS
 ┌───────────────────┐   PA0/EXTI0 ┌──────────────────┐ PB6/PB7 ┌─────────────────────┐
 │ Active IR beam    ├────────────►│                  ├────────►│ 16x2 I2C LCD        │
-├───────────────────┤   PA1       │  NVIC + EXTI     │ (level  │(via 3.3V↔5V shifter)│
+├───────────────────┤   PB5       │  NVIC + EXTI     │ (level  │(via 3.3V↔5V shifter)│
 │ HC-SR501 PIR      ├────────────►│  ADC1  (LDR)     │ shifter)└─────────────────────┘
 ├───────────────────┤   PA2       │  USART1 9600 8N1 │ PA9/10  ┌─────────────────────┐
 │ SW-420 vibration  ├────────────►│  I2C1            ├────────►│ HC-05 Bluetooth     │
@@ -57,7 +57,7 @@ This repository currently contains the **hardware bring-up test firmware** (one 
 | 4 | 12 V 1 A DC adapter (barrel jack) | 1 | VMAX SMPS, input AC 100-240 V, output 12 V / 1 A. Feeds the MB102 **and** the siren - see the budget in section 4 |
 | 5 | USB Type-C cable | 1 | Optional power / USB access to the Black Pill |
 | 6 | 5 mm IR transmitter + photodiode receiver pair | 1 pair | Replaces the unavailable active IR break-beam pair. 220 Ω resistor + one-transistor receiver stage (assembly guide, Stage 2). **Received, built and tested** |
-| 7 | HC-SR501 PIR sensor | 1 | Needs ~30-60 s warm-up |
+| 7 | HC-SR501 PIR sensor | 1 | Needs ~30-60 s warm-up. Output wired to **PB5** (not PA1) |
 | 8 | SW-420 vibration sensor module (LM393) | 1 | Digital output (DO) used |
 | 9 | LDR sensor module | 1 | Analog output (AO) used |
 | 10 | Green LED + 220 Ω resistor | 1 set | System "SECURE" indicator |
@@ -111,7 +111,7 @@ Estimated cost of the main list: **≈ ₹2,381**.
 | STM32 pin | Connected to | Function | Notes |
 |-----------|--------------|----------|-------|
 | **PA0** | IR receiver stage (NPN collector) | EXTI0 / digital in | Beam clear = LOW, beam broken = HIGH (rising edge). Polarity set by `IR_ACTIVE_LOW` in `board.h`. Black Pill KEY button is also on PA0 |
-| **PA1** | HC-SR501 PIR OUT | Digital in (EXTI1 capable) | **Not 5 V tolerant** (TTa, shared with ADC1_IN1). Measure the module's OUT before connecting - see assembly guide Stage 3 |
+| **PB5** | PIR OUT | Digital in (polled) | **Moved here from PA1.** PB5 has no ADC function, so it is an FT (5 V tolerant) pin and accepts the module's ~4.3 V output. PA1 is 3.3 V-only and is now treated as suspect |
 | **PA2** | SW-420 DO | Digital in (EXTI2 capable) | Module powered from 3.3 V |
 | **PA4** | LDR module AO | ADC1_IN4 | Must never exceed 3.3 V |
 | **PA5** | Green LED (+) via 220 Ω | GPIO out | "SECURE" indicator |
@@ -134,12 +134,14 @@ Estimated cost of the main list: **≈ ₹2,381**.
 │   ├── assembly_guide.md      # build + test the hardware step by step
 │   └── keil_setup.md          # Keil MDK, packs, ST-LINK, flashing
 └── firmware/
+    ├── app/
+    │   └── main.c             # INTEGRATED FIRMWARE - the real application
     ├── common/                # board.h / board.c  (pin map, SysTick delay, GPIO helpers)
     └── tests/
         ├── test_led.c         # PA5 status LED
         ├── test_ir_sensor.c   # PA0 EXTI0 interrupt
-        ├── test_sensors.c     # PIR (PA1) + vibration (PA2)
-        ├── test_pir.c         # PIR-only diagnostic for a stuck PA1
+        ├── test_sensors.c     # PIR (PB5) + vibration (PA2)
+        ├── test_pir.c         # simple PIR-only test on PB5
         ├── test_siren.c       # 12 V strobe siren via the PA7 relay
         ├── test_ldr.c         # (bonus) PA4 ADC
         ├── test_lcd.c         # I2C1 16x2 LCD
@@ -182,20 +184,20 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 |-------|-----------|--------|--------------|--------|
 | 1 | Green status LED | PA5 | `test_led.c` | Not recorded |
 | 2 | IR break-beam transmitter + receiver | PA0 | `test_ir_sensor.c` | **Complete - tested and passing** |
-| 3 | PIR | PA1 | `test_sensors.c` / `test_pir.c` | **Blocked** - PA1 reads permanently HIGH, under investigation |
+| 3 | PIR | **PB5** | `test_pir.c` | **Retest pending** - moved off PA1 (stuck HIGH) onto a 5 V-tolerant pin |
 | 3 | SW-420 vibration | PA2 | `test_sensors.c` | Not recorded |
 | 4 | LDR light sensor | PA4 | `test_ldr.c` | Not recorded |
 | 5 | 16x2 I2C LCD | PB6/PB7 | `test_lcd.c` | Not recorded |
 | 6 | HC-05 Bluetooth | PA9/PA10 | `test_bluetooth.c` | Not recorded |
 | 7 | Buzzer + relay (dry, no load) | PA6/PA7 | `test_actuators.c` | Not recorded |
 | 8 | **12 V strobe siren via relay** | PA7 | `test_siren.c` | **Not started** - hardware received, code written, never run |
-| 9 | Integrated state machine | all | *(not written)* | Not started |
+| 9 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |
 
 "Not recorded" means no result has been logged here, not that the stage failed. Update the row when you run the stage.
 
 ### 9.3 Open items
 
-* **PIR on PA1** - stuck HIGH. Firmware logic was audited and is correct; the lead is a ~4.3 V reading on the module's OUT pin and the fact that PA1 is not 5 V tolerant. Diagnostic procedure: assembly guide Stage 3.
+* **PIR moved to PB5** - PA1 read permanently HIGH and never changed. The firmware logic was audited and is correct, so the fault is electrical. Rather than keep debugging PA1, the PIR now lives on **PB5**, which unlike PA1 has no ADC function and therefore tolerates 5 V - so the module's measured ~4.3 V output is within spec there. Rerun `test_pir.c` on the new pin. PA1 remains unproven and should not be reused until tested.
 * **Siren** - received and confirmed 12 V from the packaging, but the **current rating is not printed on the unit or the box**. Measure it before any extended run and check it against the 1 A adapter budget in section 4.
 * **Bus wiring (item 20)** - *proposed approach only, nothing built.* The idea discussed was to reuse the existing relay module together with suitable wiring. Assessment: the relay is a **switch for the siren load**, not a power-distribution element, so it does not by itself satisfy item 20. What actually carries the rails today is the breadboard's power strips plus DuPont jumpers (item 19). Remaining work: decide whether dedicated bus wire or terminal blocks are needed for the final build, then implement and test. **Not implemented, not verified.**
 

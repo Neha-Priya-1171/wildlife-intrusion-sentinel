@@ -1,7 +1,7 @@
 /**
  * @file    test_sensors.c
- * @brief   TEST 3 - HC-SR501 PIR (PA1) and SW-420 vibration (PA2), polled with debounce.
- * Wiring: PIR OUT --> PA1 ; SW-420 DO --> PA2 ; grounds common.
+ * @brief   TEST 3 - HC-SR501 PIR (PB5) and SW-420 vibration (PA2), polled with debounce.
+ * Wiring: PIR OUT --> PB5 (moved off PA1) ; SW-420 DO --> PA2 ; grounds common.
  * Expect: 30 s PIR warm-up (LED blinks slowly). Then
  *           - PIR motion        -> ONE long LED blink  (600 ms)
  *           - Vibration/tap     -> TWO short LED blinks

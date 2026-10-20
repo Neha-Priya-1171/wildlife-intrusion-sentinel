@@ -105,28 +105,43 @@ Check the transistor pinout against the datasheet or the diode test before wirin
 
 > Note: PA0 also has the Black Pill's onboard **KEY button**. Pressing it will look like a trigger; that is normal and handy for a quick test.
 
-### Stage 3 - PIR (PA1) and vibration sensor (PA2) · `test_sensors.c`
+### Stage 3 - PIR (PB5) and vibration sensor (PA2) · `test_pir.c`, `test_sensors.c`
 
-**PIR HC-SR501**
+> **The PIR has moved from PA1 to PB5.** PA1 read permanently HIGH and would not change.
+> The firmware was checked line by line and is correct, so the fault is electrical. PB5 is
+> free, and unlike PA1 it has no ADC function, which makes it an FT (5 V tolerant) pin - so
+> the ~4.3 V measured on the module's OUT is within what PB5 accepts. Do not reuse PA1 until
+> it has been proven good.
+
+**PIR wiring - three wires, nothing else**
 
 | PIR pin | To |
 |---------|----|
 | VCC | 5 V |
-| GND | GND |
-| OUT | **PA1** - *only after the voltage check below passes* |
+| GND | GND (same ground as the Black Pill) |
+| OUT | **PB5** |
 
-> ⚠ **PA1 is not 5 V tolerant.** PA1 carries ADC1_IN1, so its I/O structure is **TTa** in the STM32F401xB/C datasheet pin table, not FT. Absolute maximum on a TTa pin is VDD + 0.3 V ≈ 3.6 V. A genuine HC-SR501 has an onboard 3.3 V regulator and its OUT swings 0 / 3.3 V, which is fine - but clones and lookalike modules exist that swing to VCC. **Measure OUT before you plug it into PA1.**
+Set the module's jumper to *repeat trigger (H)*. Turn the sensitivity trimmer to the middle
+and the hold-time trimmer to minimum for testing.
 
-**Mandatory check before connecting OUT (do this with OUT unplugged from the MCU):**
+**Test:** build `test_pir.c` + `common/board.c` and flash it. The green LED copies the PIR
+output directly: wave your hand and it should light, stand still and it should go out after a
+few seconds. Wait out the 30-60 s warm-up before judging anything.
 
-1. Power the module, black probe on the module's own GND pin.
-2. Measure module VCC→GND. It should read 4.8-5.1 V. A reading well below that means the MB102 rail is sagging.
-3. Measure OUT→GND, idle and while waving a hand, for at least 60 s.
-   * **0 V idle, ~3.3 V on motion** → correct, connect to PA1.
-   * **Anything above 3.3 V** → do **not** connect it to PA1. See "PA1 stuck HIGH" below.
-   * **A level that never changes** → the module is not operating; the fault is upstream of the firmware.
+**Three variables to watch in Keil** (right-click each → *Add to Watch 1*):
 
-Set the module's jumper to *repeat trigger (H)* and turn both trimmers to the middle (one sets sensitivity/range, one sets hold time - turn hold time to minimum for testing).
+| Variable | Meaning |
+|----------|---------|
+| `pir_state` | what the pin reads right now: 0 or 1 |
+| `pir_events` | how many times motion has started; goes up by 1 per wave |
+| `pir_low_seen` | 0 until the pin has been low at least once, then stays 1 |
+
+**How to read it:**
+
+* `pir_low_seen` becomes 1 and `pir_events` counts your waves → **the PIR works.**
+* `pir_low_seen` stays 0 for several minutes → the pin is stuck high. Unplug the OUT wire from
+  PB5 and look again: with nothing connected, `pir_state` must read 0. If it still reads 1 with
+  the wire off, the problem is on the board side, not the sensor.
 
 **SW-420 vibration module**
 
@@ -136,35 +151,10 @@ Set the module's jumper to *repeat trigger (H)* and turn both trimmers to the mi
 | GND | GND |
 | DO | **PA2** |
 
-Turn the blue trimmer until the module's indicator LED is just off when it is still, and flickers when you tap the table.
+Turn the blue trimmer until the module's indicator LED is just off when it is still, and
+flickers when you tap the table.
 
-**Test:** flash `test_sensors.c`. **Expect:** LED blinks slowly for ~30 s (PIR warm-up; keep still / away from the sensor), then:
-* wave a hand → **one long blink** (PIR)
-* tap the sensor/table → **two quick blinks** (vibration)
-
-Watch `pir_events` / `vib_events` in the debugger.
-
-**If it fails:** PIR still warming up; PIR dome facing a heat source/sunlight; vibration too sensitive → turn pot to reduce, or too insensitive → turn pot the other way; polarity wrong → adjust `PIR_ACTIVE_HIGH` / `VIB_ACTIVE_HIGH`.
-
-#### Diagnosing "PA1 always reads HIGH" · `test_pir.c`
-
-`test_sensors.c` mixes two sensors and a 30 s blocking warm-up, which makes a stuck pin hard to see. Build **`test_pir.c` + `common/board.c`** instead: it watches PA1 only, samples from t = 0, and never blocks.
-
-The variable that settles the question is **`pir_low_seen`**. It latches to 1 the first time PA1 reads 0. A PIR merely being *held* high by its hold-time pot still drops low eventually, so `pir_low_seen` becomes 1. If it stays 0 for several minutes, PA1 never goes low at all and the cause is electrical.
-
-Run these three passes, editing `PIR_PULL_MODE` at the top of the file and re-flashing each time.
-
-| Pass | `PIR_PULL_MODE` | PIR OUT wire | Expected `pir_raw` | If it differs |
-|------|-----------------|--------------|--------------------|---------------|
-| 1 | `BRD_PULL_DOWN` | **unplugged from PA1** | `0` | PA1 reads 1 with nothing attached and an internal pull-down active → the pin itself is damaged (likely from over-voltage) or a stray wire is driving it. Move the PIR to a spare pin such as PB0 and retest. |
-| 2 | `BRD_PULL_UP` | **unplugged from PA1** | `1` | PA1 cannot be pulled high → broken wire to the MCU, or wrong pin on the board. Confirms the Watch plumbing works. |
-| 3 | `BRD_PULL_DOWN` | connected | toggles with motion | Still stuck at 1 → the module is driving the line high permanently. Go back to the OUT→GND measurement above. |
-
-Passes 1 and 2 test the **MCU pin in isolation**, with no sensor attached. Run them first; they take two minutes and they tell you whether you are debugging the STM32 or the sensor.
-
-**Reading 4.3 V on OUT.** That is roughly 5 V minus one diode drop, which most often means the module is reverse-powered - VCC and GND swapped. Module pin order is not standardised: some are VCC-OUT-GND, some GND-OUT-VCC, and the silkscreen is usually hidden under the lens. Pull the dome off and read the labels on the PCB before trusting the order. A reverse-powered module typically sits at a fixed junk output level and never detects, which matches a stuck reading that two different sensors share and that survives changing both pots. Other possibilities: the module is a clone with no 3.3 V regulator (OUT swings to VCC), or the pin being probed is not OUT.
-
-**Do not** fix a 4.3 V output with a bare resistive divider until you know why it is 4.3 V. If the module genuinely has a 5 V push-pull output, a 10 kΩ / 20 kΩ divider from OUT to PA1 to GND is appropriate. If it is 4.3 V because the supply is reversed, a divider just feeds PA1 a quieter wrong signal.
+`test_sensors.c` runs the PIR and the vibration sensor together once both are wired.
 
 ### Stage 4 - LDR light sensor (PA4) · `test_ldr.c` *(bonus test)*
 
@@ -292,6 +282,27 @@ both the MB102 and the siren, so the two together must stay under 1 A.
    reading. Then subtract it from 1 A - what is left is your budget for the MB102 and
    everything on its rails.
 
+#### Getting wires out of the 12 V adapter (no cutting, no soldering)
+
+**The relay cannot replace the adapter.** A relay is only a switch - it has no power of its
+own. It connects and disconnects the 12 V, so the 12 V still has to come from the adapter.
+Leave the adapter out and the siren simply cannot run.
+
+You do **not** need to cut anything. Buy a **DC barrel jack female-to-screw-terminal adapter**
+(also sold as "DC 5.5 x 2.1 mm female connector with screw terminals"). It costs ₹20-40.
+The adapter plugs into it, and two screws hold ordinary jumper wires. That is the whole job:
+no stripping, no soldering, and the mains side is never touched.
+
+* The screw terminal is marked **+** and **−**. Check with the multimeter on DC volts before
+  connecting anything: red probe in **+** should read about +12 V.
+* If it reads −12 V, your probes are swapped, not the adapter.
+
+**If you cannot get one in time:** skip the siren and demonstrate with the **buzzer on PA6**,
+which runs from the 5 V you already have. The integrated firmware drives the relay either way,
+so you will still hear it click at the right moment - it just will not have a load on it. The
+siren can be added later without changing a line of code. This is a perfectly reasonable
+submission; record the siren as future work rather than wiring something unsafe in a hurry.
+
 #### Wiring
 
 | Connection | Detail |
@@ -338,6 +349,47 @@ overloaded: the siren plus the MB102 exceeds 1 A, so power the siren from a sepa
 Siren sounds the moment power is applied, before the sequence → load wired to NC, or
 `RELAY_ACTIVE_LOW` is set wrong for your board.
 
+### Stage 9 - Integrated firmware · `firmware/app/main.c`
+
+Run this only after the individual stages pass. It is the real application: all sensors,
+the LCD, Bluetooth and both deterrents driven by one state machine.
+
+**Build:** add exactly two files to a new Keil target - `firmware/app/main.c` and
+`firmware/common/board.c`. Same project options as any test (define `STM32F401xC`,
+`firmware/common` on the include path, C99).
+
+**What you should see**
+
+| Phase | LED (PA5) | LCD line 1 | Lasts |
+|-------|-----------|------------|-------|
+| Warm-up | slow blink | `SWIS WARMING UP` | ~30 s |
+| Armed | steady on | `STATUS: SECURE` | until a sensor fires |
+| Checking | fast blink | `CHECKING...` | up to 2 s |
+| Breach | fast blink | `STATUS: BREACH` | 10 s |
+| Cooldown | off | `COOLDOWN` | 3 s |
+
+LCD line 2 shows `DAY`/`NIGHT` and the breach count.
+
+**The validation rule.** In daylight the system wants **two** sensors to agree before it calls
+a breach - that is what stops wind and sun glare setting it off. In the dark **one** sensor is
+enough. Triggers that nothing confirms are counted in `false_alarms` and otherwise ignored.
+Set `REQUIRE_SECOND_SENSOR` to `0` in main.c if you want any single sensor to fire the alarm
+(useful for a quick demo, worse in the field).
+
+**On the phone** (Android serial terminal, 9600 8N1): a status line arrives every 5 s, and
+`ZONE 1: ANIMAL BREACH` on each confirmed breach. Commands: `?` help, `S` status,
+`R` reset to secure, `T` 2 s deterrent test.
+
+**Missing hardware is tolerated.** If no LCD answers on I2C the system logs `lcd_ok = 0` and
+carries on without it. If nothing is wired to the relay contacts you just hear the relay click.
+Neither stops the rest of the system.
+
+**Watch in Keil:** `state`, `breach_count`, `false_alarms`, `ir_events`, `pir_events`,
+`vib_events`, `ldr_value`, `is_night`, `lcd_ok`.
+
+> **Status: written, never run on hardware.** Expect to adjust `DARK_THRESHOLD` and the
+> polarity macros in `board.h` on the first real test.
+
 ---
 
 ## 4. Power-budget sanity check
@@ -362,7 +414,7 @@ Linear regulators dissipate `(Vin − Vout) × I` as heat: with a 12 V adapter t
 
 - [ ] 3.3 V rail = 3.3 V ± 0.1 V, 5 V rail = 5 V ± 0.25 V (measured with everything connected)
 - [ ] 0 Ω / beep between GND of every module, the Black Pill and the ST-LINK
-- [ ] PA0, PA1, PA2 and PA4 each measured ≤ 3.3 V in every sensor state (PA0: about 0 V beam clear, about 3.3 V beam blocked)
+- [ ] PA0, PA2 and PA4 each measured ≤ 3.3 V in every sensor state (PA0: about 0 V beam clear, about 3.3 V beam blocked). PB5 carries the PIR and tolerates up to 5 V
 - [ ] LCD level shifter: LV = 3.3 V, HV = 5 V, pull-ups verified on both sides
 - [ ] HC-05 TXD→PA10, RXD→PA9 (crossed), VCC = 5 V
 - [ ] Buzzer transistor orientation verified, 1 kΩ in series with the base

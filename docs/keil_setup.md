@@ -47,7 +47,7 @@ Target: **STM32F401CCU6 Black Pill** · Tool: **Keil MDK-ARM v5 (µVision)** · 
 Only **one** `main()` can exist in a build. Choose one approach:
 
 * **Simplest:** create a new Keil project folder per test.
-* **Tidier:** in one project use *Project → Manage → Project Items → Targets* to create targets `LED`, `IR`, `SENSORS`, `PIR`, `LCD`, `BT`, `ACT`, `SIREN`. For each target, right-click each test file → *Options for File* and untick **Include in Target Build** for every test except its own. Always include `board.c`.
+* **Tidier:** in one project use *Project → Manage → Project Items → Targets* to create targets `LED`, `IR`, `SENSORS`, `PIR`, `LCD`, `BT`, `ACT`, `SIREN`, plus an `APP` target for the integrated `firmware/app/main.c`. For each target, right-click each test file → *Options for File* and untick **Include in Target Build** for every test except its own. Always include `board.c`.
 
 Select the target in the toolbar drop-down before building.
 

@@ -6,7 +6,7 @@
  *
  *  FINAL PIN MAP (see README.md)
  *    PA0  Active IR OUT      EXTI0          PA6  Buzzer (via NPN)   GPIO out
- *    PA1  HC-SR501 PIR OUT   GPIO in        PA7  Relay IN           GPIO out
+ *    PB5  PIR OUT (was PA1)  GPIO in        PA7  Relay IN           GPIO out
  *    PA2  SW-420 DO          GPIO in        PA9  HC-05 RXD          USART1_TX
  *    PA4  LDR module AO      ADC1_IN4       PA10 HC-05 TXD          USART1_RX
  *    PA5  Green status LED   GPIO out       PB6/PB7 LCD SCL/SDA     I2C1 (level shifter)
@@ -20,8 +20,12 @@
 /* ---------- Pin assignments ---------- */
 #define IR_PORT      GPIOA
 #define IR_PIN       0
-#define PIR_PORT     GPIOA
-#define PIR_PIN      1
+/* PIR moved off PA1 to PB5 after PA1 read permanently HIGH.
+ * Two reasons for PB5: it is free, and unlike PA1 it has no ADC function, so it is an
+ * FT (5 V tolerant) pin. The PIR module measured ~4.3 V on OUT, which is over the limit
+ * for PA1 but within what an FT pin accepts. Treat PA1 as suspect until proven good. */
+#define PIR_PORT     GPIOB
+#define PIR_PIN      5
 #define VIB_PORT     GPIOA
 #define VIB_PIN      2
 #define LDR_PORT     GPIOA
