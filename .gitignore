@@ -23,3 +23,7 @@ RTE/_*/
 *.sct
 *.scvd
 .vscode/
+
+# Python
+__pycache__/
+*.pyc

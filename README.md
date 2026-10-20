@@ -133,6 +133,10 @@ Estimated cost of the main list: **≈ ₹2,381**.
 ├── docs/
 │   ├── assembly_guide.md      # build + test the hardware step by step
 │   └── keil_setup.md          # Keil MDK, packs, ST-LINK, flashing
+├── simulation/                # live GUI bridged to the hardware (separate from app/)
+│   ├── swis_gui.py            # forest/farm animation driven by Bluetooth telemetry
+│   ├── firmware/sim_main.c    # main.c + telemetry; main.c itself is untouched
+│   └── README.md
 └── firmware/
     ├── app/
     │   └── main.c             # INTEGRATED FIRMWARE - the real application
@@ -192,6 +196,7 @@ Stages match the sections in [`docs/assembly_guide.md`](docs/assembly_guide.md).
 | 7 | Buzzer + relay (dry, no load) | PA6/PA7 | `test_actuators.c` | Not recorded |
 | 8 | **12 V strobe siren via relay** | PA7 | `test_siren.c` | **Not started** - hardware received, code written, never run |
 | 9 | Integrated state machine | all | `firmware/app/main.c` | **Written, never run on hardware** |
+| 10 | Live GUI simulation | - | `simulation/swis_gui.py` + `simulation/firmware/sim_main.c` | **Desktop side tested; never run against the board** |
 
 "Not recorded" means no result has been logged here, not that the stage failed. Update the row when you run the stage.
 
